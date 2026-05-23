@@ -47,7 +47,9 @@ MIN_AVG_VALUE_CR    = 20     # crore — minimum 60-day avg traded value
 # SEBI         : 0.0001% both sides
 # Stamp duty   : 0.015% on buy side
 # Effective round-trip cost ≈ 0.17%
-STT_SELL        = 0.001
+# CORRECT
+STT_BUY  = 0.001      # 0.1% on buy side
+STT_SELL = 0.001      # 0.1% on sell side
 EXCHANGE_CHARGE = 0.0000325
 SEBI_CHARGE     = 0.000001
 STAMP_DUTY      = 0.00015
@@ -55,8 +57,9 @@ STAMP_DUTY      = 0.00015
 # ─────────────────────────────────────────────
 # BACKTEST SETTINGS
 # ─────────────────────────────────────────────
-START_DATE      = "2020-01-01"
-END_DATE        = "2024-12-31"
+# Change these two lines
+START_DATE = "2019-01-01"
+END_DATE   = "2020-12-31"
 INITIAL_CAPITAL = 100000      # ₹1 lakh (results scale %-wise regardless)
 RISK_FREE_RATE  = 0.065       # 6.5% — India 10yr G-Sec
 

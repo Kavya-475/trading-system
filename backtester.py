@@ -81,8 +81,9 @@ UNIVERSE = {
 # ── Transaction cost calculator ────────────────────────────────────────────
 def txn_cost(value, side):
     cost = value * (cfg.EXCHANGE_CHARGE + cfg.SEBI_CHARGE)
-    cost += value * cfg.STAMP_DUTY   if side == "buy"  else 0
-    cost += value * cfg.STT_SELL     if side == "sell" else 0
+    cost += value * cfg.STAMP_DUTY  if side == "buy"  else 0
+    cost += value * cfg.STT_BUY     if side == "buy"  else 0   # ← add this
+    cost += value * cfg.STT_SELL    if side == "sell" else 0
     return cost
 
 
