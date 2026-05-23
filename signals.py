@@ -1,15 +1,16 @@
 """
-signals.py
-==========
-Core signal engine for the Statistical Quality + Momentum strategy.
-Universe : Nifty 200 (approximated with major constituents)
-Regime   : Nifty 500 close vs 200-DMA  (Risk-On / Risk-Off)
-Score    : 0.45 * z(12M mom) + 0.35 * z(6M mom) - 0.20 * z(6M vol)
-           Momentum excludes the most recent month (t-20 days)
-Output   : Top 10 ranked stocks with max 2 per sector
+signals.py  [AGGRESSIVE CONFIG]
+================================
+Core signal engine — imports all parameters from config.py.
+
+Changes from conservative version:
+  - TOP_N          : 10 → 7
+  - MAX_PER_SECTOR : 2  → 3
+  - EXIT_RANK      : 20 → 25
+  - Formula adds 3M momentum, halves volatility penalty
+  - All parameters imported from config.py
 
 Run:
-    pip install yfinance pandas numpy
     python signals.py
 """
 
@@ -20,472 +21,241 @@ from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings("ignore")
 
-# ─────────────────────────────────────────────
-# STRATEGY PARAMETERS  (edit these freely)
-# ─────────────────────────────────────────────
-TOP_N               = 10       # number of stocks to hold
-MAX_PER_SECTOR      = 2        # sector concentration cap
-MIN_PRICE           = 100      # ₹ minimum closing price filter
-MIN_AVG_VALUE_CR    = 20       # crore — 60-day avg traded value filter
-LOOKBACK_12M_DAYS   = 252      # trading days in 12 months
-LOOKBACK_6M_DAYS    = 126      # trading days in 6 months
-SKIP_RECENT_DAYS    = 20       # exclude last ~1 month for momentum (avoids reversal)
-REGIME_DMA          = 200      # DMA period for regime filter
-DATA_YEARS          = 2        # years of historical data to fetch
+import config as cfg
 
 # ─────────────────────────────────────────────
-# NIFTY 200 UNIVERSE
-# NSE tickers in yfinance format (append .NS)
-# Source: NSE India — update this list semi-annually
+# NIFTY LARGEMIDCAP 250 UNIVERSE
 # ─────────────────────────────────────────────
 UNIVERSE = {
-    # ticker        : sector
-    "RELIANCE"      : "Energy",
-    "ONGC"          : "Energy",
-    "BPCL"          : "Energy",
-    "GAIL"          : "Energy",
-    "TATAPOWER"     : "Energy",
-    "ADANIGREEN"    : "Energy",
-    "NTPC"          : "Energy",
-    "POWERGRID"     : "Energy",
-    "NHPC"          : "Energy",
+    "TCS":"IT","INFY":"IT","HCLTECH":"IT","WIPRO":"IT","TECHM":"IT",
+    "LTIM":"IT","MPHASIS":"IT","PERSISTENT":"IT","COFORGE":"IT",
+    "KPITTECH":"IT","TATAELXSI":"IT","OFSS":"IT",
 
-    "TCS"           : "IT",
-    "INFOSYS"       : "IT",
-    "HCLTECH"       : "IT",
-    "WIPRO"         : "IT",
-    "TECHM"         : "IT",
-    "LTIM"          : "IT",
-    "MPHASIS"       : "IT",
-    "PERSISTENT"    : "IT",
-    "COFORGE"       : "IT",
-    "KPIT"          : "IT",
+    "HDFCBANK":"Banking","ICICIBANK":"Banking","SBIN":"Banking",
+    "KOTAKBANK":"Banking","AXISBANK":"Banking","INDUSINDBK":"Banking",
+    "BANDHANBNK":"Banking","FEDERALBNK":"Banking","IDFCFIRSTB":"Banking",
+    "PNB":"Banking","BANKBARODA":"Banking","CANBK":"Banking",
+    "UNIONBANK":"Banking","AUBANK":"Banking","RBLBANK":"Banking",
 
-    "HDFCBANK"      : "Banking",
-    "ICICIBANK"     : "Banking",
-    "SBIN"          : "Banking",
-    "KOTAKBANK"     : "Banking",
-    "AXISBANK"      : "Banking",
-    "INDUSINDBK"    : "Banking",
-    "BANDHANBNK"    : "Banking",
-    "FEDERALBNK"    : "Banking",
-    "IDFCFIRSTB"    : "Banking",
-    "PNB"           : "Banking",
-    "BANKBARODA"    : "Banking",
+    "BAJFINANCE":"NBFC","BAJAJFINSV":"NBFC","CHOLAFIN":"NBFC",
+    "MUTHOOTFIN":"NBFC","MANAPPURAM":"NBFC","LICHSGFIN":"NBFC",
+    "SUNDARMFIN":"NBFC","SHRIRAMFIN":"NBFC",
 
-    "BAJFINANCE"    : "NBFC",
-    "BAJAJFINSV"    : "NBFC",
-    "CHOLAFIN"      : "NBFC",
-    "MUTHOOTFIN"    : "NBFC",
-    "MANAPPURAM"    : "NBFC",
-    "LICHSGFIN"     : "NBFC",
+    "SBILIFE":"Insurance","HDFCLIFE":"Insurance","ICICIGI":"Insurance",
+    "LICI":"Insurance","STARHEALTH":"Insurance",
 
-    "SBILIFE"       : "Insurance",
-    "HDFCLIFE"      : "Insurance",
-    "ICICIlombard"  : "Insurance",
-    "LICI"          : "Insurance",
-    "STARHEALTH"    : "Insurance",
+    "SUNPHARMA":"Pharma","DRREDDY":"Pharma","CIPLA":"Pharma",
+    "DIVISLAB":"Pharma","LUPIN":"Pharma","TORNTPHARM":"Pharma",
+    "AUROPHARMA":"Pharma","ALKEM":"Pharma","ZYDUSLIFE":"Pharma",
+    "IPCALAB":"Pharma","ABBOTINDIA":"Pharma",
 
-    "SUNPHARMA"     : "Pharma",
-    "DRREDDY"       : "Pharma",
-    "CIPLA"         : "Pharma",
-    "DIVISLAB"      : "Pharma",
-    "LUPIN"         : "Pharma",
-    "TORNTPHARM"    : "Pharma",
-    "AUROPHARMA"    : "Pharma",
-    "ALKEM"         : "Pharma",
-    "ZYDUSLIFE"     : "Pharma",
-    "BIOCON"        : "Pharma",
+    "HINDUNILVR":"FMCG","ITC":"FMCG","NESTLEIND":"FMCG",
+    "BRITANNIA":"FMCG","DABUR":"FMCG","MARICO":"FMCG",
+    "COLPAL":"FMCG","GODREJCP":"FMCG","TATACONSUM":"FMCG",
+    "VBL":"FMCG","UBL":"FMCG",
 
-    "HINDUNILVR"    : "FMCG",
-    "ITC"           : "FMCG",
-    "NESTLEIND"     : "FMCG",
-    "BRITANNIA"     : "FMCG",
-    "DABUR"         : "FMCG",
-    "MARICO"        : "FMCG",
-    "COLPAL"        : "FMCG",
-    "GODREJCP"      : "FMCG",
-    "TATACONSUM"    : "FMCG",
+    "MARUTI":"Auto","TATAMOTORS":"Auto","EICHERMOT":"Auto",
+    "BAJAJ-AUTO":"Auto","HEROMOTOCO":"Auto","ASHOKLEY":"Auto",
+    "MRF":"Auto","BALKRISIND":"Auto","MOTHERSON":"Auto",
+    "TVSMOTOR":"Auto","M&M":"Auto","BHARATFORG":"Auto","TIINDIA":"Auto",
 
-    "MARUTI"        : "Auto",
-    "TATAMOTORS"    : "Auto",
-    "EICHERMOT"     : "Auto",
-    "BAJAJ-AUTO"    : "Auto",
-    "HEROMOTOCO"    : "Auto",
-    "ASHOKLEY"      : "Auto",
-    "MRF"           : "Auto",
-    "BALKRISIND"    : "Auto",
-    "MOTHERSON"     : "Auto",
+    "LT":"Capital Goods","SIEMENS":"Capital Goods","ABB":"Capital Goods",
+    "HAVELLS":"Capital Goods","BEL":"Capital Goods","HAL":"Capital Goods",
+    "BHEL":"Capital Goods","CGPOWER":"Capital Goods","THERMAX":"Capital Goods",
+    "CUMMINSIND":"Capital Goods","VOLTAS":"Capital Goods","SUZLON":"Capital Goods",
+    "KEC":"Capital Goods",
 
-    "LT"            : "Capital Goods",
-    "SIEMENS"       : "Capital Goods",
-    "ABB"           : "Capital Goods",
-    "HAVELLS"       : "Capital Goods",
-    "BEL"           : "Capital Goods",
-    "HAL"           : "Capital Goods",
-    "BHEL"          : "Capital Goods",
-    "BHARATFORG"    : "Capital Goods",
-    "TIINDIA"       : "Capital Goods",
+    "RELIANCE":"Energy","ONGC":"Energy","BPCL":"Energy","GAIL":"Energy",
+    "TATAPOWER":"Energy","ADANIGREEN":"Energy","NTPC":"Energy",
+    "POWERGRID":"Energy","NHPC":"Energy","TORNTPOWER":"Energy","SJVN":"Energy",
 
-    "ASIANPAINT"    : "Paints",
-    "BERGEPAINT"    : "Paints",
-    "PIDILITIND"    : "Chemicals",
-    "DEEPAKNTR"     : "Chemicals",
-    "SRF"           : "Chemicals",
-    "AARTI"         : "Chemicals",
-    "NAVINFLUOR"    : "Chemicals",
+    "PIDILITIND":"Chemicals","DEEPAKNTR":"Chemicals","SRF":"Chemicals",
+    "AARTIIND":"Chemicals","NAVINFLUOR":"Chemicals","ATUL":"Chemicals",
+    "ALKYLAMINE":"Chemicals",
 
-    "TITAN"         : "Consumer",
-    "TRENT"         : "Consumer",
-    "DMART"         : "Consumer",
-    "PAGEIND"       : "Consumer",
-    "JUBLFOOD"      : "Consumer",
-    "IRCTC"         : "Consumer",
+    "ASIANPAINT":"Paints","BERGEPAINT":"Paints","KANSAINER":"Paints",
 
-    "ULTRACEMCO"    : "Cement",
-    "SHREECEM"      : "Cement",
-    "AMBUJACEM"     : "Cement",
-    "GRASIM"        : "Cement",
+    "TITAN":"Consumer","TRENT":"Consumer","DMART":"Consumer",
+    "PAGEIND":"Consumer","JUBLFOOD":"Consumer","IRCTC":"Consumer",
+    "NAUKRI":"Consumer","ZOMATO":"Consumer","INDIAMART":"Consumer",
 
-    "JSWSTEEL"      : "Metals",
-    "TATASTEEL"     : "Metals",
-    "HINDALCO"      : "Metals",
-    "VEDL"          : "Metals",
-    "SAIL"          : "Metals",
-    "COALINDIA"     : "Metals",
+    "ULTRACEMCO":"Cement","SHREECEM":"Cement","AMBUJACEM":"Cement",
+    "GRASIM":"Cement","JKCEMENT":"Cement",
 
-    "BHARTIARTL"    : "Telecom",
-    "TATACOMM"      : "Telecom",
+    "JSWSTEEL":"Metals","TATASTEEL":"Metals","HINDALCO":"Metals",
+    "VEDL":"Metals","SAIL":"Metals","COALINDIA":"Metals","APLAPOLLO":"Metals",
 
-    "DLF"           : "Realty",
-    "GODREJPROP"    : "Realty",
-    "OBEROIRLTY"    : "Realty",
-    "PRESTIGE"      : "Realty",
-    "LODHA"         : "Realty",
+    "BHARTIARTL":"Telecom","TATACOMM":"Telecom",
 
-    "APOLLOHOSP"    : "Healthcare",
-    "MAXHEALTH"     : "Healthcare",
-    "FORTIS"        : "Healthcare",
+    "DLF":"Realty","GODREJPROP":"Realty","OBEROIRLTY":"Realty",
+    "PRESTIGE":"Realty","LODHA":"Realty","PHOENIXLTD":"Realty","BRIGADE":"Realty",
 
-    "ADANIPORTS"    : "Infrastructure",
-    "CONCOR"        : "Infrastructure",
-    "ADANIENT"      : "Infrastructure",
+    "APOLLOHOSP":"Healthcare","MAXHEALTH":"Healthcare","FORTIS":"Healthcare",
 
-    "ZOMATO"        : "New Age",
-    "NAUKRI"        : "New Age",
-    "INDIAMART"     : "New Age",
+    "ADANIPORTS":"Infrastructure","ADANIENT":"Infrastructure","IRB":"Infrastructure",
 
-    "CDSL"          : "Financials",
-    "BSE"           : "Financials",
-    "MCX"           : "Financials",
-    "ANGELONE"      : "Financials",
-    "CAMS"          : "Financials",
-    "360ONE"        : "Financials",
+    "CDSL":"Financials","BSE":"Financials","MCX":"Financials",
+    "ANGELONE":"Financials","CAMS":"Financials","360ONE":"Financials","HDFCAMC":"Financials",
 }
 
-REGIME_TICKER = "^CRSLDX"   # Nifty 500 index on yfinance
 
-
-# ─────────────────────────────────────────────
-# STEP 1: FETCH DATA
-# ─────────────────────────────────────────────
-def fetch_data(tickers: list, years: int = DATA_YEARS) -> pd.DataFrame:
-    """
-    Downloads OHLCV data for all tickers using yfinance.
-    Returns a DataFrame with MultiIndex columns (OHLCV, ticker).
-    """
+def fetch_data(tickers):
     end   = datetime.today()
-    start = end - timedelta(days=years * 365 + 60)   # extra buffer for DMA
-
-    yf_tickers = [t + ".NS" for t in tickers]
-    print(f"\nFetching data for {len(yf_tickers)} stocks...")
-
+    start = end - timedelta(days=2*365+60)
+    print(f"\nFetching data for {len(tickers)} stocks...")
     raw = yf.download(
-        yf_tickers,
+        [t+".NS" for t in tickers],
         start=start.strftime("%Y-%m-%d"),
         end=end.strftime("%Y-%m-%d"),
-        auto_adjust=True,
-        progress=False,
+        auto_adjust=True, progress=False
     )
-    print("Data fetched successfully.")
+    print("Done.")
     return raw
 
 
-def fetch_regime_data(years: int = DATA_YEARS) -> pd.Series:
-    """Fetches Nifty 500 closing prices for regime filter."""
+def fetch_regime_data():
     end   = datetime.today()
-    start = end - timedelta(days=years * 365 + 60)
-    data  = yf.download(
-        REGIME_TICKER,
-        start=start.strftime("%Y-%m-%d"),
-        end=end.strftime("%Y-%m-%d"),
-        auto_adjust=True,
-        progress=False,
-    )
+    start = end - timedelta(days=2*365+60)
+    data  = yf.download(cfg.REGIME_TICKER, start=start.strftime("%Y-%m-%d"),
+                        end=end.strftime("%Y-%m-%d"), auto_adjust=True, progress=False)
     return data["Close"].squeeze()
 
 
-# ─────────────────────────────────────────────
-# STEP 2: REGIME FILTER
-# ─────────────────────────────────────────────
-def get_regime(nifty500_close: pd.Series) -> str:
-    """
-    Risk-On  : Nifty 500 > 200-DMA  → proceed with signals
-    Risk-Off : Nifty 500 < 200-DMA  → liquidate, hold cash
-    """
-    dma_200    = nifty500_close.rolling(REGIME_DMA).mean()
-    latest     = nifty500_close.iloc[-1]
-    latest_dma = dma_200.iloc[-1]
-
-    regime = "RISK-ON" if latest > latest_dma else "RISK-OFF"
-    print(f"\nREGIME CHECK")
-    print(f"  Nifty 500  : {latest:,.2f}")
-    print(f"  200 DMA    : {latest_dma:,.2f}")
-    print(f"  Status     : {regime}")
+def get_regime(nifty500):
+    dma    = nifty500.rolling(cfg.REGIME_DMA).mean()
+    latest = nifty500.iloc[-1]
+    l_dma  = dma.iloc[-1]
+    regime = "RISK-ON" if latest > l_dma else "RISK-OFF"
+    print(f"\nREGIME CHECK\n  Nifty 500 : {latest:,.2f}\n  200 DMA   : {l_dma:,.2f}\n  Status    : {regime}")
     return regime
 
 
-# ─────────────────────────────────────────────
-# STEP 3: LIQUIDITY FILTER
-# ─────────────────────────────────────────────
-def apply_liquidity_filter(raw: pd.DataFrame, tickers: list) -> list:
-    """
-    Keeps only stocks where:
-      - Latest close > ₹MIN_PRICE
-      - 60-day average traded value > ₹MIN_AVG_VALUE_CR crore
-    """
+def apply_liquidity_filter(raw, tickers):
     passed = []
-
-    for ticker in tickers:
-        yf_ticker = ticker + ".NS"
+    for t in tickers:
         try:
-            close  = raw["Close"][yf_ticker].dropna()
-            volume = raw["Volume"][yf_ticker].dropna()
-
-            if len(close) < 60:
+            c = raw["Close"][t+".NS"].dropna()
+            v = raw["Volume"][t+".NS"].dropna()
+            if len(c) < 60 or c.iloc[-1] < cfg.MIN_PRICE:
                 continue
-
-            latest_price = close.iloc[-1]
-            if latest_price < MIN_PRICE:
-                continue
-
-            # Traded value = Close * Volume (proxy for turnover)
-            traded_value  = (close * volume).rolling(60).mean().iloc[-1]
-            traded_value_cr = traded_value / 1e7   # convert to crore
-
-            if traded_value_cr >= MIN_AVG_VALUE_CR:
-                passed.append(ticker)
-
+            if (c*v).rolling(60).mean().iloc[-1] / 1e7 >= cfg.MIN_AVG_VALUE_CR:
+                passed.append(t)
         except Exception:
             continue
-
-    print(f"\nLIQUIDITY FILTER: {len(passed)}/{len(tickers)} stocks passed")
+    print(f"\nLIQUIDITY FILTER: {len(passed)}/{len(tickers)} passed")
     return passed
 
 
-# ─────────────────────────────────────────────
-# STEP 4: COMPUTE MOMENTUM & VOLATILITY SCORES
-# ─────────────────────────────────────────────
-def compute_scores(raw: pd.DataFrame, tickers: list) -> pd.DataFrame:
-    """
-    For each stock:
-      mom_12m = return from -252 days to -20 days
-      mom_6m  = return from -126 days to -20 days
-      vol_6m  = std of daily returns over last 126 days (annualised)
-
-    Then z-score each factor across the universe.
-    Final score = 0.45*z_12m + 0.35*z_6m - 0.20*z_vol
-    """
+def compute_scores(raw, tickers):
     records = []
-
-    for ticker in tickers:
-        yf_ticker = ticker + ".NS"
+    for t in tickers:
         try:
-            close = raw["Close"][yf_ticker].dropna()
-
-            if len(close) < LOOKBACK_12M_DAYS + SKIP_RECENT_DAYS:
+            close = raw["Close"][t+".NS"].dropna()
+            if len(close) < cfg.LOOKBACK_12M + cfg.SKIP_RECENT:
                 continue
-
-            # Momentum: return excluding the most recent month
-            price_now       = close.iloc[-(SKIP_RECENT_DAYS + 1)]
-            price_12m_ago   = close.iloc[-(LOOKBACK_12M_DAYS + SKIP_RECENT_DAYS)]
-            price_6m_ago    = close.iloc[-(LOOKBACK_6M_DAYS  + SKIP_RECENT_DAYS)]
-
-            mom_12m = (price_now - price_12m_ago) / price_12m_ago
-            mom_6m  = (price_now - price_6m_ago)  / price_6m_ago
-
-            # Volatility: annualised std of daily returns over last 6 months
-            recent_close = close.iloc[-LOOKBACK_6M_DAYS:]
-            daily_ret    = recent_close.pct_change().dropna()
-            vol_6m       = daily_ret.std() * np.sqrt(252)
-
-            records.append({
-                "ticker"  : ticker,
-                "sector"  : UNIVERSE.get(ticker, "Unknown"),
-                "price"   : close.iloc[-1],
-                "mom_12m" : mom_12m,
-                "mom_6m"  : mom_6m,
-                "vol_6m"  : vol_6m,
-            })
-
+            s = cfg.SKIP_RECENT
+            p_now    = close.iloc[-(s+1)]
+            p_12m    = close.iloc[-(cfg.LOOKBACK_12M+s)]
+            p_6m     = close.iloc[-(cfg.LOOKBACK_6M+s)]
+            p_3m     = close.iloc[-(cfg.LOOKBACK_3M+s)]
+            mom_12m  = (p_now-p_12m)/p_12m
+            mom_6m   = (p_now-p_6m)/p_6m
+            mom_3m   = (p_now-p_3m)/p_3m
+            vol_6m   = close.iloc[-cfg.LOOKBACK_6M:].pct_change().dropna().std()*np.sqrt(252)
+            records.append({"ticker":t,"sector":UNIVERSE.get(t,"Unknown"),
+                            "price":close.iloc[-1],"mom_12m":mom_12m,
+                            "mom_6m":mom_6m,"mom_3m":mom_3m,"vol_6m":vol_6m})
         except Exception:
             continue
 
     df = pd.DataFrame(records).set_index("ticker")
-
     if df.empty:
-        print("ERROR: No valid stocks found. Check data.")
         return df
 
-    # Z-score each factor (mean=0, std=1 across universe)
-    def zscore(series):
-        return (series - series.mean()) / series.std()
-
-    df["z_12m"] = zscore(df["mom_12m"])
-    df["z_6m"]  = zscore(df["mom_6m"])
-    df["z_vol"] = zscore(df["vol_6m"])
-
-    # Blended score
-    df["score"] = (
-        0.45 * df["z_12m"] +
-        0.35 * df["z_6m"]  -
-        0.20 * df["z_vol"]
-    )
-
+    def z(s): return (s-s.mean())/s.std() if s.std()>0 else s*0
+    df["z_12m"] = z(df["mom_12m"])
+    df["z_6m"]  = z(df["mom_6m"])
+    df["z_3m"]  = z(df["mom_3m"])
+    df["z_vol"] = z(df["vol_6m"])
+    df["score"] = (cfg.W_MOM_12M*df["z_12m"] + cfg.W_MOM_6M*df["z_6m"] +
+                   cfg.W_MOM_3M*df["z_3m"]  + cfg.W_VOL*df["z_vol"])
     return df.sort_values("score", ascending=False)
 
 
-# ─────────────────────────────────────────────
-# STEP 5: SECTOR CAP & FINAL PORTFOLIO
-# ─────────────────────────────────────────────
-def select_portfolio(scored: pd.DataFrame) -> pd.DataFrame:
-    """
-    Picks top N stocks with max MAX_PER_SECTOR per sector.
-    Equal weight across all selected stocks.
-    """
-    selected   = []
-    sector_count = {}
-
+def select_portfolio(scored):
+    selected, sector_count = [], {}
     for ticker, row in scored.iterrows():
-        sector = row["sector"]
-        count  = sector_count.get(sector, 0)
-
-        if count < MAX_PER_SECTOR:
+        s = row["sector"]
+        if sector_count.get(s,0) < cfg.MAX_PER_SECTOR:
             selected.append(ticker)
-            sector_count[sector] = count + 1
-
-        if len(selected) == TOP_N:
+            sector_count[s] = sector_count.get(s,0)+1
+        if len(selected) == cfg.TOP_N:
             break
+    port = scored.loc[selected].copy()
+    port["weight"] = 1.0/len(port)
+    return port
 
-    portfolio = scored.loc[selected].copy()
-    portfolio["weight"] = 1.0 / len(portfolio)
-    return portfolio
 
-
-# ─────────────────────────────────────────────
-# STEP 6: CHECK 100-DMA EXIT SIGNAL
-# ─────────────────────────────────────────────
-def check_exit_signals(raw: pd.DataFrame, current_holdings: list) -> list:
-    """
-    Returns list of tickers to EXIT because price < 100-DMA.
-    Pass in your current holdings list.
-    If empty list passed, skips this check.
-    """
-    exit_list = []
-
-    for ticker in current_holdings:
-        yf_ticker = ticker + ".NS"
+def check_exit_signals(raw, scored, current_holdings):
+    exits  = []
+    top_n  = scored.head(cfg.EXIT_RANK_CUTOFF).index.tolist()
+    for t in current_holdings:
+        reason = None
+        if t not in top_n:
+            reason = f"dropped out of top {cfg.EXIT_RANK_CUTOFF}"
         try:
-            close    = raw["Close"][yf_ticker].dropna()
-            dma_100  = close.rolling(100).mean().iloc[-1]
-            latest   = close.iloc[-1]
-
-            if latest < dma_100:
-                exit_list.append(ticker)
-                print(f"  EXIT SIGNAL → {ticker}: price {latest:.1f} < 100-DMA {dma_100:.1f}")
-
+            c      = raw["Close"][t+".NS"].dropna()
+            dma100 = c.rolling(cfg.DMA_EXIT).mean().iloc[-1]
+            if c.iloc[-1] < dma100:
+                reason = f"below 100-DMA ({dma100:.0f})"
         except Exception:
-            continue
+            pass
+        if reason:
+            exits.append(t)
+            print(f"  EXIT → {t}: {reason}")
+    return exits
 
-    return exit_list
 
+def run_signals(current_holdings=[]):
+    tickers  = list(UNIVERSE.keys())
+    raw      = fetch_data(tickers)
+    nifty500 = fetch_regime_data()
+    regime   = get_regime(nifty500)
 
-# ─────────────────────────────────────────────
-# MAIN: RUN SIGNAL GENERATION
-# ─────────────────────────────────────────────
-def run_signals(current_holdings: list = []) -> dict:
-    """
-    Full signal pipeline. Returns a dict with:
-      - regime     : "RISK-ON" or "RISK-OFF"
-      - portfolio  : DataFrame of top 10 stocks to hold
-      - exits      : list of current holdings to sell
-    """
-    tickers = list(UNIVERSE.keys())
-
-    # Fetch all data
-    raw        = fetch_data(tickers)
-    nifty500   = fetch_regime_data()
-
-    # Regime check first — if Risk-Off, skip everything
-    regime = get_regime(nifty500)
     if regime == "RISK-OFF":
-        print("\nMARKET IS RISK-OFF. Hold cash. No new positions.")
-        exits = current_holdings   # sell everything
-        return {"regime": regime, "portfolio": pd.DataFrame(), "exits": exits}
+        print("\nRISK-OFF → Hold cash. Sell all holdings.")
+        return {"regime":regime,"portfolio":pd.DataFrame(),"exits":current_holdings}
 
-    # Liquidity filter
-    liquid_tickers = apply_liquidity_filter(raw, tickers)
-
-    # Score remaining stocks
-    print("\nComputing momentum and volatility scores...")
-    scored = compute_scores(raw, liquid_tickers)
-
-    # Select top 10 with sector cap
+    liquid    = apply_liquidity_filter(raw, tickers)
+    scored    = compute_scores(raw, liquid)
     portfolio = select_portfolio(scored)
-
-    # Check exit signals for current holdings
-    exits = check_exit_signals(raw, current_holdings)
-
-    # Also exit if a holding dropped out of top 20
-    top_20 = scored.head(20).index.tolist()
-    for h in current_holdings:
-        if h not in top_20 and h not in exits:
-            exits.append(h)
-            print(f"  EXIT SIGNAL → {h}: dropped out of top 20")
-
-    return {"regime": regime, "portfolio": portfolio, "exits": exits}
+    exits     = check_exit_signals(raw, scored, current_holdings)
+    return {"regime":regime,"portfolio":portfolio,"exits":exits}
 
 
-# ─────────────────────────────────────────────
-# PRINT RESULTS
-# ─────────────────────────────────────────────
 if __name__ == "__main__":
-    print("=" * 55)
-    print("  STATISTICAL QUALITY + MOMENTUM SIGNAL ENGINE")
-    print(f"  Run date: {datetime.today().strftime('%Y-%m-%d %H:%M')}")
-    print("=" * 55)
+    print("="*55)
+    print("  AGGRESSIVE MOMENTUM SIGNAL ENGINE")
+    print(f"  Run date : {datetime.today().strftime('%Y-%m-%d %H:%M')}")
+    print(f"  Stocks   : {cfg.TOP_N} | Sector cap : {cfg.MAX_PER_SECTOR} | Exit rank : {cfg.EXIT_RANK_CUTOFF}")
+    print(f"  Formula  : {cfg.W_MOM_12M}*z12M + {cfg.W_MOM_6M}*z6M + {cfg.W_MOM_3M}*z3M + {cfg.W_VOL}*zVol")
+    print("="*55)
 
-    # Pass your current holdings here on subsequent runs
-    # Example: current_holdings = ["RELIANCE", "TCS", "HDFCBANK"]
-    current_holdings = []
-
-    result = run_signals(current_holdings)
+    result = run_signals([])
 
     if not result["portfolio"].empty:
-        print("\n" + "=" * 55)
-        print("  TOP 10 PORTFOLIO — BUY / HOLD TOMORROW")
-        print("=" * 55)
-        display_cols = ["sector", "price", "mom_12m", "mom_6m", "vol_6m", "score", "weight"]
-        display      = result["portfolio"][display_cols].copy()
-        display["mom_12m"] = (display["mom_12m"] * 100).round(1).astype(str) + "%"
-        display["mom_6m"]  = (display["mom_6m"]  * 100).round(1).astype(str) + "%"
-        display["vol_6m"]  = (display["vol_6m"]  * 100).round(1).astype(str) + "%"
-        display["price"]   = display["price"].round(1)
-        display["score"]   = display["score"].round(3)
-        display["weight"]  = (display["weight"] * 100).round(1).astype(str) + "%"
-        print(display.to_string())
+        print(f"\n{'='*55}")
+        print(f"  TOP {cfg.TOP_N} PORTFOLIO — BUY / HOLD TOMORROW")
+        print("="*55)
+        cols = ["sector","price","mom_12m","mom_6m","mom_3m","vol_6m","score","weight"]
+        d    = result["portfolio"][cols].copy()
+        for col in ["mom_12m","mom_6m","mom_3m","vol_6m"]:
+            d[col] = (d[col]*100).round(1).astype(str)+"%"
+        d["price"]  = d["price"].round(1)
+        d["score"]  = d["score"].round(3)
+        d["weight"] = (d["weight"]*100).round(1).astype(str)+"%"
+        print(d.to_string())
 
     if result["exits"]:
-        print(f"\n  SELL TOMORROW: {', '.join(result['exits'])}")
-
-    print("\nDone. Run this every evening after 3:30 PM IST.")
+        print(f"\n  SELL TOMORROW : {', '.join(result['exits'])}")
+    print("\nRun every evening after 3:30 PM IST.")
