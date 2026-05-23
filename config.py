@@ -58,8 +58,9 @@ STAMP_DUTY      = 0.00015
 # BACKTEST SETTINGS
 # ─────────────────────────────────────────────
 # Change these two lines
-START_DATE = "2019-01-01"
-END_DATE   = "2020-12-31"
+# config.py — change back to original
+START_DATE = "2020-01-01"
+END_DATE   = "2024-12-31"
 INITIAL_CAPITAL = 100000      # ₹1 lakh (results scale %-wise regardless)
 RISK_FREE_RATE  = 0.065       # 6.5% — India 10yr G-Sec
 
