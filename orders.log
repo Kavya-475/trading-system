@@ -1,0 +1,93 @@
+2026-05-23 19:01:26 | INFO | =======================================================
+2026-05-23 19:01:26 | INFO | EXECUTION RUN — 2026-05-23 19:01:26
+2026-05-23 19:01:26 | INFO | MODE: PAPER TRADING
+2026-05-23 19:01:26 | INFO | =======================================================
+2026-05-23 19:01:26 | INFO | Current holdings: None (empty portfolio)
+2026-05-23 19:01:26 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-23 19:01:26 | INFO | Running signal engine...
+2026-05-23 19:01:28 | ERROR | HTTP Error 404: {"quoteSummary":{"result":null,"error":{"code":"Not Found","description":"Quote not found for symbol: TATAMOTORS.NS"}}}
+2026-05-23 19:01:29 | ERROR | $TATAMOTORS.NS: possibly delisted; no timezone found
+2026-05-23 19:01:29 | ERROR | $ZOMATO.NS: possibly delisted; no timezone found
+2026-05-23 19:01:30 | ERROR | HTTP Error 404: {"quoteSummary":{"result":null,"error":{"code":"Not Found","description":"Quote not found for symbol: LTIM.NS"}}}
+2026-05-23 19:01:30 | ERROR | $LTIM.NS: possibly delisted; no timezone found
+2026-05-23 19:01:31 | ERROR | 
+58 Failed downloads:
+2026-05-23 19:01:31 | ERROR | ['TATAMOTORS.NS', 'ZOMATO.NS', 'LTIM.NS']: possibly delisted; no timezone found
+2026-05-23 19:01:31 | ERROR | ['HAVELLS.NS', 'DRREDDY.NS', 'TRENT.NS', 'SHREECEM.NS', 'KEC.NS', 'ADANIENT.NS', 'HINDALCO.NS', 'ONGC.NS', 'SHRIRAMFIN.NS', 'TORNTPOWER.NS', 'ASHOKLEY.NS', 'KPITTECH.NS', 'BANDHANBNK.NS', 'HDFCLIFE.NS', 'ANGELONE.NS', 'THERMAX.NS', '360ONE.NS', 'IRB.NS', 'DLF.NS', 'JUBLFOOD.NS', 'CHOLAFIN.NS', 'NTPC.NS', 'VEDL.NS', 'ASIANPAINT.NS', 'AUBANK.NS', 'MRF.NS', 'DEEPAKNTR.NS', 'SBIN.NS', 'TIINDIA.NS', 'DMART.NS', 'KANSAINER.NS', 'LT.NS', 'BEL.NS', 'TORNTPHARM.NS', 'CANBK.NS', 'ABBOTINDIA.NS', 'BSE.NS', 'ALKYLAMINE.NS', 'BERGEPAINT.NS', 'BANKBARODA.NS', 'BALKRISIND.NS', 'TATACONSUM.NS', 'ATUL.NS', 'INFY.NS', 'ADANIPORTS.NS', 'CGPOWER.NS', 'BRITANNIA.NS', 'SAIL.NS', 'BAJAJ-AUTO.NS', 'COALINDIA.NS', 'MANAPPURAM.NS', 'COLPAL.NS', 'TVSMOTOR.NS', 'CUMMINSIND.NS', 'LUPIN.NS']: TypeError("'NoneType' object is not subscriptable")
+2026-05-23 19:01:31 | INFO | Regime: RISK-OFF
+2026-05-23 19:01:32 | ERROR | Failed to get ticker 'TATAMOTORS.NS' reason: Failed to perform, curl: (6) Could not resolve host: query2.finance.yahoo.com. See https://curl.se/libcurl/c/libcurl-errors.html first for more details.
+2026-05-23 19:01:32 | ERROR | $TATAMOTORS.NS: possibly delisted; no timezone found
+2026-05-23 19:01:32 | ERROR | Failed to get ticker 'ZOMATO.NS' reason: Failed to perform, curl: (6) getaddrinfo() thread failed to start. See https://curl.se/libcurl/c/libcurl-errors.html first for more details.
+2026-05-23 19:01:32 | ERROR | $ZOMATO.NS: possibly delisted; no timezone found
+2026-05-23 19:01:33 | ERROR | $LTIM.NS: possibly delisted; no timezone found
+2026-05-23 19:01:33 | ERROR | 
+79 Failed downloads:
+2026-05-23 19:01:33 | ERROR | ['TATACOMM.NS', 'FORTIS.NS', 'INDUSINDBK.NS', 'GAIL.NS', 'IDFCFIRSTB.NS', 'TECHM.NS', 'MARUTI.NS', 'SBILIFE.NS', 'JSWSTEEL.NS', 'GODREJPROP.NS', 'SUZLON.NS', 'ABB.NS', 'HDFCBANK.NS', 'DABUR.NS', 'NAUKRI.NS', 'UNIONBANK.NS', 'BAJFINANCE.NS', 'PHOENIXLTD.NS', 'BRIGADE.NS', 'OBEROIRLTY.NS', 'MAXHEALTH.NS', 'IPCALAB.NS', 'PRESTIGE.NS', 'DRREDDY.NS', 'HAVELLS.NS', 'TRENT.NS', 'SHREECEM.NS', 'KEC.NS', 'ADANIENT.NS', 'HINDALCO.NS', 'ONGC.NS', 'SHRIRAMFIN.NS', 'TORNTPOWER.NS', 'ASHOKLEY.NS', 'KPITTECH.NS', 'BANDHANBNK.NS', 'HDFCLIFE.NS', '360ONE.NS', 'ANGELONE.NS', 'STARHEALTH.NS', 'DLF.NS', 'VEDL.NS', 'LICHSGFIN.NS', 'ASIANPAINT.NS', 'LODHA.NS', 'MRF.NS', 'SBIN.NS', 'PAGEIND.NS', 'DMART.NS', 'KANSAINER.NS', 'LT.NS', 'TORNTPHARM.NS', 'BSE.NS', 'ABBOTINDIA.NS', 'ALKYLAMINE.NS', 'BERGEPAINT.NS', 'BALKRISIND.NS', 'BANKBARODA.NS', 'TATACONSUM.NS', 'ATUL.NS', 'INFY.NS', 'ADANIPORTS.NS', 'BRITANNIA.NS', 'SAIL.NS', 'BAJAJ-AUTO.NS', 'COALINDIA.NS', 'COLPAL.NS', 'TVSMOTOR.NS', 'CUMMINSIND.NS', 'CHOLAFIN.NS']: TypeError("'NoneType' object is not subscriptable")
+2026-05-23 19:01:33 | ERROR | ['TATAMOTORS.NS', 'ZOMATO.NS', 'LTIM.NS']: possibly delisted; no timezone found
+2026-05-23 19:01:33 | ERROR | ['BPCL.NS', 'AUBANK.NS', 'TIINDIA.NS', 'BEL.NS', 'CANBK.NS', 'MANAPPURAM.NS']: OperationalError('unable to open database file')
+2026-05-23 19:01:33 | INFO | RISK-OFF — selling all holdings
+2026-05-23 19:01:33 | INFO | Holdings saved: {}
+2026-05-23 19:01:33 | INFO | Telegram not configured — skipping notification
+2026-05-23 19:01:33 | INFO | All positions liquidated. Holding cash.
+2026-05-23 19:04:25 | INFO | =======================================================
+2026-05-23 19:04:25 | INFO | EXECUTION RUN — 2026-05-23 19:04:25
+2026-05-23 19:04:25 | INFO | MODE: PAPER TRADING
+2026-05-23 19:04:25 | INFO | =======================================================
+2026-05-23 19:04:25 | INFO | Current holdings: None (empty)
+2026-05-23 19:04:25 | INFO | Loaded latest prices for 149 stocks from cache
+2026-05-23 19:04:25 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-23 19:04:25 | INFO | Running signal engine...
+2026-05-23 19:04:28 | ERROR | HTTP Error 404: {"quoteSummary":{"result":null,"error":{"code":"Not Found","description":"Quote not found for symbol: TATAMOTORS.NS"}}}
+2026-05-23 19:04:28 | ERROR | $TATAMOTORS.NS: possibly delisted; no timezone found
+2026-05-23 19:04:30 | ERROR | Failed to get ticker 'LTIM.NS' reason: Failed to perform, curl: (6) getaddrinfo() thread failed to start. See https://curl.se/libcurl/c/libcurl-errors.html first for more details.
+2026-05-23 19:04:30 | ERROR | Failed to get ticker 'ZOMATO.NS' reason: unable to open database file
+2026-05-23 19:04:30 | ERROR | $ZOMATO.NS: possibly delisted; no timezone found
+2026-05-23 19:04:31 | ERROR | 
+47 Failed downloads:
+2026-05-23 19:04:31 | ERROR | ['TATAMOTORS.NS', 'ZOMATO.NS']: possibly delisted; no timezone found
+2026-05-23 19:04:31 | ERROR | ['ITC.NS', 'DRREDDY.NS', 'NTPC.NS', 'BSE.NS', 'SUZLON.NS', 'BRIGADE.NS', 'COFORGE.NS', 'M&M.NS', 'JSWSTEEL.NS', 'BEL.NS', 'TIINDIA.NS', 'ABBOTINDIA.NS', 'KPITTECH.NS', 'HDFCAMC.NS', 'CDSL.NS', 'PHOENIXLTD.NS', 'SAIL.NS', 'MARICO.NS', 'CAMS.NS', 'ADANIPORTS.NS', 'LT.NS', 'HEROMOTOCO.NS', 'MRF.NS', 'STARHEALTH.NS', 'ALKYLAMINE.NS', 'PRESTIGE.NS', 'TATACOMM.NS', 'MCX.NS', 'ASHOKLEY.NS', 'ICICIGI.NS', 'CUMMINSIND.NS', 'ASIANPAINT.NS', 'DIVISLAB.NS', 'APOLLOHOSP.NS', 'BANKBARODA.NS', 'VOLTAS.NS', 'ONGC.NS', 'DEEPAKNTR.NS', 'ZYDUSLIFE.NS', 'AUBANK.NS', 'ALKEM.NS', 'JKCEMENT.NS', 'VEDL.NS', 'GODREJPROP.NS']: TypeError("'NoneType' object is not subscriptable")
+2026-05-23 19:04:31 | ERROR | ['LTIM.NS']: DNSError('Failed to perform, curl: (6) getaddrinfo() thread failed to start. See https://curl.se/libcurl/c/libcurl-errors.html first for more details.')
+2026-05-23 19:04:31 | INFO | Regime: RISK-OFF
+2026-05-23 19:04:31 | INFO | RISK-OFF — liquidating all positions
+2026-05-23 19:04:31 | INFO | Holdings saved: {}
+2026-05-23 19:04:31 | INFO | Telegram not configured — skipping
+2026-05-23 19:04:31 | INFO | Liquidation complete. Holding 100% cash.
+2026-05-23 19:10:32 | INFO | =======================================================
+2026-05-23 19:10:32 | INFO | EXECUTION RUN — 2026-05-23 19:10:32
+2026-05-23 19:10:32 | INFO | MODE: PAPER TRADING
+2026-05-23 19:10:32 | INFO | =======================================================
+2026-05-23 19:10:32 | INFO | Current holdings: None (empty)
+2026-05-23 19:10:32 | INFO | Loaded latest prices for 149 stocks from cache
+2026-05-23 19:10:32 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-23 19:10:32 | INFO | Running signal engine...
+2026-05-23 19:10:32 | INFO | Regime: RISK-OFF
+2026-05-23 19:10:32 | INFO | RISK-OFF — liquidating all positions
+2026-05-23 19:10:32 | INFO | Holdings saved: {}
+2026-05-23 19:10:32 | INFO | Telegram not configured — skipping
+2026-05-23 19:10:32 | INFO | Liquidation complete. Holding 100% cash.
+2026-05-23 19:15:44 | INFO | =======================================================
+2026-05-23 19:15:44 | INFO | EXECUTION RUN — 2026-05-23 19:15:44
+2026-05-23 19:15:44 | INFO | MODE: PAPER TRADING
+2026-05-23 19:15:44 | INFO | =======================================================
+2026-05-23 19:15:44 | INFO | Current holdings: None (empty)
+2026-05-23 19:15:44 | INFO | Loaded latest prices for 149 stocks from cache
+2026-05-23 19:15:44 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-23 19:15:44 | INFO | Running signal engine...
+2026-05-23 19:15:44 | INFO | Regime: RISK-OFF
+2026-05-23 19:15:44 | INFO | RISK-OFF — liquidating all positions
+2026-05-23 19:15:44 | INFO | Holdings saved: {}
+2026-05-23 19:15:44 | INFO | Telegram not configured — skipping
+2026-05-23 19:15:44 | INFO | Liquidation complete. Holding 100% cash.
+2026-05-23 19:16:13 | INFO | =======================================================
+2026-05-23 19:16:13 | INFO | EXECUTION RUN — 2026-05-23 19:16:13
+2026-05-23 19:16:13 | INFO | MODE: PAPER TRADING
+2026-05-23 19:16:13 | INFO | =======================================================
+2026-05-23 19:16:13 | INFO | Current holdings: None (empty)
+2026-05-23 19:16:14 | INFO | Loaded latest prices for 149 stocks from cache
+2026-05-23 19:16:14 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-23 19:16:14 | INFO | Running signal engine...
+2026-05-23 19:16:14 | INFO | Regime: RISK-OFF
+2026-05-23 19:16:14 | INFO | RISK-OFF — liquidating all positions
+2026-05-23 19:16:14 | INFO | Holdings saved: {}
+2026-05-23 19:16:14 | INFO | Telegram not configured — skipping
+2026-05-23 19:16:14 | INFO | Liquidation complete. Holding 100% cash.

@@ -1,27 +1,25 @@
 """
-signals.py  [AGGRESSIVE CONFIG]
-================================
-Core signal engine — imports all parameters from config.py.
+signals.py  [AGGRESSIVE CONFIG — cache-based]
+==============================================
+Reads price data from cache instead of fetching from Yahoo Finance.
+Run data_manager.py first to ensure cache is up to date.
 
-Changes from conservative version:
-  - TOP_N          : 10 → 7
-  - MAX_PER_SECTOR : 2  → 3
-  - EXIT_RANK      : 20 → 25
-  - Formula adds 3M momentum, halves volatility penalty
-  - All parameters imported from config.py
+Daily workflow:
+    python data_manager.py   ← updates cache (run once at 3:40 PM)
+    python execution.py      ← reads cache, runs signals, places orders
 
-Run:
+Run standalone:
     python signals.py
 """
 
-import yfinance as yf
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime
 import warnings
 warnings.filterwarnings("ignore")
 
 import config as cfg
+from data_manager import load_for_signals, load_index_data
 
 # ─────────────────────────────────────────────
 # NIFTY LARGEMIDCAP 250 UNIVERSE
@@ -51,8 +49,7 @@ UNIVERSE = {
 
     "HINDUNILVR":"FMCG","ITC":"FMCG","NESTLEIND":"FMCG",
     "BRITANNIA":"FMCG","DABUR":"FMCG","MARICO":"FMCG",
-    "COLPAL":"FMCG","GODREJCP":"FMCG","TATACONSUM":"FMCG",
-    "VBL":"FMCG","UBL":"FMCG",
+    "COLPAL":"FMCG","GODREJCP":"FMCG","TATACONSUM":"FMCG","VBL":"FMCG","UBL":"FMCG",
 
     "MARUTI":"Auto","TATAMOTORS":"Auto","EICHERMOT":"Auto",
     "BAJAJ-AUTO":"Auto","HEROMOTOCO":"Auto","ASHOKLEY":"Auto",
@@ -99,78 +96,88 @@ UNIVERSE = {
 }
 
 
-def fetch_data(tickers):
-    end   = datetime.today()
-    start = end - timedelta(days=2*365+60)
-    print(f"\nFetching data for {len(tickers)} stocks...")
-    raw = yf.download(
-        [t+".NS" for t in tickers],
-        start=start.strftime("%Y-%m-%d"),
-        end=end.strftime("%Y-%m-%d"),
-        auto_adjust=True, progress=False
-    )
-    print("Done.")
-    return raw
-
-
-def fetch_regime_data():
-    end   = datetime.today()
-    start = end - timedelta(days=2*365+60)
-    data  = yf.download(cfg.REGIME_TICKER, start=start.strftime("%Y-%m-%d"),
-                        end=end.strftime("%Y-%m-%d"), auto_adjust=True, progress=False)
-    return data["Close"].squeeze()
-
-
-def get_regime(nifty500):
-    dma    = nifty500.rolling(cfg.REGIME_DMA).mean()
-    latest = nifty500.iloc[-1]
+# ─────────────────────────────────────────────
+# REGIME FILTER
+# ─────────────────────────────────────────────
+def get_regime(nifty500: pd.Series) -> str:
+    clean  = nifty500.dropna()          # remove NaN gaps before rolling
+    dma    = clean.rolling(cfg.REGIME_DMA).mean()
+    latest = clean.iloc[-1]
     l_dma  = dma.iloc[-1]
     regime = "RISK-ON" if latest > l_dma else "RISK-OFF"
-    print(f"\nREGIME CHECK\n  Nifty 500 : {latest:,.2f}\n  200 DMA   : {l_dma:,.2f}\n  Status    : {regime}")
+    print(f"\nREGIME CHECK")
+    print(f"  Nifty 500 : {latest:,.2f}")
+    print(f"  200 DMA   : {l_dma:,.2f}")
+    print(f"  Status    : {regime}")
     return regime
 
 
-def apply_liquidity_filter(raw, tickers):
+# ─────────────────────────────────────────────
+# LIQUIDITY FILTER
+# Uses cache data — no network call
+# ─────────────────────────────────────────────
+def apply_liquidity_filter(close: pd.DataFrame, volume: pd.DataFrame,
+                            tickers: list) -> list:
     passed = []
     for t in tickers:
+        if t not in close.columns:
+            continue
         try:
-            c = raw["Close"][t+".NS"].dropna()
-            v = raw["Volume"][t+".NS"].dropna()
+            c = close[t].dropna()
+            v = volume[t].dropna() if t in volume.columns else pd.Series()
             if len(c) < 60 or c.iloc[-1] < cfg.MIN_PRICE:
                 continue
-            if (c*v).rolling(60).mean().iloc[-1] / 1e7 >= cfg.MIN_AVG_VALUE_CR:
-                passed.append(t)
+            if len(v) >= 60:
+                traded_val_cr = (c * v).rolling(60).mean().iloc[-1] / 1e7
+                if traded_val_cr < cfg.MIN_AVG_VALUE_CR:
+                    continue
+            passed.append(t)
         except Exception:
             continue
     print(f"\nLIQUIDITY FILTER: {len(passed)}/{len(tickers)} passed")
     return passed
 
 
-def compute_scores(raw, tickers):
+# ─────────────────────────────────────────────
+# COMPUTE SCORES
+# ─────────────────────────────────────────────
+def compute_scores(close: pd.DataFrame, tickers: list) -> pd.DataFrame:
+    """
+    Scores each stock on momentum (12M, 6M, 3M) and volatility.
+    Reads entirely from cache — zero network calls.
+    """
     records = []
     for t in tickers:
+        if t not in close.columns:
+            continue
         try:
-            close = raw["Close"][t+".NS"].dropna()
-            if len(close) < cfg.LOOKBACK_12M + cfg.SKIP_RECENT:
+            prices = close[t].dropna()
+            if len(prices) < cfg.LOOKBACK_12M + cfg.SKIP_RECENT:
                 continue
-            s = cfg.SKIP_RECENT
-            p_now    = close.iloc[-(s+1)]
-            p_12m    = close.iloc[-(cfg.LOOKBACK_12M+s)]
-            p_6m     = close.iloc[-(cfg.LOOKBACK_6M+s)]
-            p_3m     = close.iloc[-(cfg.LOOKBACK_3M+s)]
+
+            s        = cfg.SKIP_RECENT
+            p_now    = prices.iloc[-(s+1)]
+            p_12m    = prices.iloc[-(cfg.LOOKBACK_12M+s)]
+            p_6m     = prices.iloc[-(cfg.LOOKBACK_6M+s)]
+            p_3m     = prices.iloc[-(cfg.LOOKBACK_3M+s)]
+
             mom_12m  = (p_now-p_12m)/p_12m
             mom_6m   = (p_now-p_6m)/p_6m
             mom_3m   = (p_now-p_3m)/p_3m
-            vol_6m   = close.iloc[-cfg.LOOKBACK_6M:].pct_change().dropna().std()*np.sqrt(252)
-            records.append({"ticker":t,"sector":UNIVERSE.get(t,"Unknown"),
-                            "price":close.iloc[-1],"mom_12m":mom_12m,
-                            "mom_6m":mom_6m,"mom_3m":mom_3m,"vol_6m":vol_6m})
+            vol_6m   = prices.iloc[-cfg.LOOKBACK_6M:].pct_change().dropna().std()*np.sqrt(252)
+
+            records.append({
+                "ticker" :t, "sector":UNIVERSE.get(t,"Unknown"),
+                "price"  :prices.iloc[-1],
+                "mom_12m":mom_12m,"mom_6m":mom_6m,"mom_3m":mom_3m,"vol_6m":vol_6m,
+            })
         except Exception:
             continue
 
+    if not records:
+        return pd.DataFrame()
+
     df = pd.DataFrame(records).set_index("ticker")
-    if df.empty:
-        return df
 
     def z(s): return (s-s.mean())/s.std() if s.std()>0 else s*0
     df["z_12m"] = z(df["mom_12m"])
@@ -182,13 +189,16 @@ def compute_scores(raw, tickers):
     return df.sort_values("score", ascending=False)
 
 
-def select_portfolio(scored):
-    selected, sector_count = [], {}
+# ─────────────────────────────────────────────
+# PORTFOLIO SELECTION
+# ─────────────────────────────────────────────
+def select_portfolio(scored: pd.DataFrame) -> pd.DataFrame:
+    selected, sc = [], {}
     for ticker, row in scored.iterrows():
         s = row["sector"]
-        if sector_count.get(s,0) < cfg.MAX_PER_SECTOR:
+        if sc.get(s,0) < cfg.MAX_PER_SECTOR:
             selected.append(ticker)
-            sector_count[s] = sector_count.get(s,0)+1
+            sc[s] = sc.get(s,0)+1
         if len(selected) == cfg.TOP_N:
             break
     port = scored.loc[selected].copy()
@@ -196,60 +206,80 @@ def select_portfolio(scored):
     return port
 
 
-def check_exit_signals(raw, scored, current_holdings):
+# ─────────────────────────────────────────────
+# EXIT SIGNALS
+# ─────────────────────────────────────────────
+def check_exit_signals(close: pd.DataFrame, scored: pd.DataFrame,
+                        current_holdings: list) -> list:
     exits  = []
     top_n  = scored.head(cfg.EXIT_RANK_CUTOFF).index.tolist()
     for t in current_holdings:
         reason = None
         if t not in top_n:
             reason = f"dropped out of top {cfg.EXIT_RANK_CUTOFF}"
-        try:
-            c      = raw["Close"][t+".NS"].dropna()
-            dma100 = c.rolling(cfg.DMA_EXIT).mean().iloc[-1]
-            if c.iloc[-1] < dma100:
-                reason = f"below 100-DMA ({dma100:.0f})"
-        except Exception:
-            pass
+        if t in close.columns:
+            try:
+                p      = close[t].dropna()
+                dma100 = p.rolling(cfg.DMA_EXIT).mean().iloc[-1]
+                if p.iloc[-1] < dma100:
+                    reason = f"below 100-DMA ({dma100:.0f})"
+            except Exception:
+                pass
         if reason:
             exits.append(t)
             print(f"  EXIT → {t}: {reason}")
     return exits
 
 
-def run_signals(current_holdings=[]):
-    tickers  = list(UNIVERSE.keys())
-    raw      = fetch_data(tickers)
-    nifty500 = fetch_regime_data()
-    regime   = get_regime(nifty500)
+# ─────────────────────────────────────────────
+# MAIN — reads from cache, zero network calls
+# ─────────────────────────────────────────────
+def run_signals(current_holdings: list = []) -> dict:
+    """
+    Full signal pipeline using cached data.
+    No Yahoo Finance fetch — reads from disk only.
+    """
+    # Load from cache
+    close, volume = load_for_signals()
+    nifty500, _   = load_index_data()
+
+    regime = get_regime(nifty500)
 
     if regime == "RISK-OFF":
         print("\nRISK-OFF → Hold cash. Sell all holdings.")
         return {"regime":regime,"portfolio":pd.DataFrame(),"exits":current_holdings}
 
-    liquid    = apply_liquidity_filter(raw, tickers)
-    scored    = compute_scores(raw, liquid)
+    tickers  = list(UNIVERSE.keys())
+    liquid   = apply_liquidity_filter(close, volume, tickers)
+    print(f"\nComputing scores for {len(liquid)} stocks...")
+    scored   = compute_scores(close, liquid)
+
+    if scored.empty:
+        print("No stocks passed scoring. Check cache data.")
+        return {"regime":regime,"portfolio":pd.DataFrame(),"exits":[]}
+
     portfolio = select_portfolio(scored)
-    exits     = check_exit_signals(raw, scored, current_holdings)
+    exits     = check_exit_signals(close, scored, current_holdings)
     return {"regime":regime,"portfolio":portfolio,"exits":exits}
 
 
+# ─────────────────────────────────────────────
 if __name__ == "__main__":
     print("="*55)
     print("  AGGRESSIVE MOMENTUM SIGNAL ENGINE")
     print(f"  Run date : {datetime.today().strftime('%Y-%m-%d %H:%M')}")
     print(f"  Stocks   : {cfg.TOP_N} | Sector cap : {cfg.MAX_PER_SECTOR} | Exit rank : {cfg.EXIT_RANK_CUTOFF}")
-    print(f"  Formula  : {cfg.W_MOM_12M}*z12M + {cfg.W_MOM_6M}*z6M + {cfg.W_MOM_3M}*z3M + {cfg.W_VOL}*zVol")
     print("="*55)
 
     result = run_signals([])
 
     if not result["portfolio"].empty:
         print(f"\n{'='*55}")
-        print(f"  TOP {cfg.TOP_N} PORTFOLIO — BUY / HOLD TOMORROW")
+        print(f"  TOP {cfg.TOP_N} PORTFOLIO")
         print("="*55)
-        cols = ["sector","price","mom_12m","mom_6m","mom_3m","vol_6m","score","weight"]
+        cols = ["sector","price","mom_12m","mom_6m","mom_3m","score","weight"]
         d    = result["portfolio"][cols].copy()
-        for col in ["mom_12m","mom_6m","mom_3m","vol_6m"]:
+        for col in ["mom_12m","mom_6m","mom_3m"]:
             d[col] = (d[col]*100).round(1).astype(str)+"%"
         d["price"]  = d["price"].round(1)
         d["score"]  = d["score"].round(3)
@@ -257,5 +287,5 @@ if __name__ == "__main__":
         print(d.to_string())
 
     if result["exits"]:
-        print(f"\n  SELL TOMORROW : {', '.join(result['exits'])}")
+        print(f"\n  SELL: {', '.join(result['exits'])}")
     print("\nRun every evening after 3:30 PM IST.")
