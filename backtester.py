@@ -1,19 +1,24 @@
 """
-backtester.py  [AGGRESSIVE CONFIG]
-====================================
-Walk-forward backtest — imports all parameters from config.py.
+backtester.py  [DAILY EXIT VERSION]
+=====================================
+Walk-forward backtest with daily exit monitoring.
 
-Aggressive changes vs conservative:
-  - TOP_N 10 → 7  (more concentrated positions)
-  - MAX_PER_SECTOR 2 → 3  (ride hot sectors harder)
-  - EXIT_RANK_CUTOFF 20 → 25  (let winners run longer)
-  - Formula: adds 3M momentum, halves volatility penalty
+Key improvement over monthly-only version:
+  - Regime check runs EVERY trading day
+  - 100 DMA exit checked EVERY trading day
+  - Rank exit checked EVERY trading day (using last monthly scores)
+  - Exit triggers immediate replacement buy — no cash sitting idle
+  - Full portfolio rotation on first trading day of each month only
+  - Score computation monthly only (performance + realism)
+
+This more accurately reflects live execution.py behaviour.
+Expected result vs monthly backtester:
+  - Slightly lower CAGR (more transaction costs from faster exits)
+  - Lower max drawdown (exits happen days faster)
+  - More realistic overall
 
 Run:
-    pip install yfinance pandas numpy python-dateutil
     python backtester.py
-
-First run downloads data (~4 mins). Saves to disk. Subsequent runs use cache.
 """
 
 import yfinance as yf
@@ -26,7 +31,7 @@ warnings.filterwarnings("ignore")
 
 import config as cfg
 
-# ── Universe (same as signals.py) ──────────────────────────────────────────
+# ── Universe ───────────────────────────────────────────────────────────────
 UNIVERSE = {
     "TCS":"IT","INFY":"IT","HCLTECH":"IT","WIPRO":"IT","TECHM":"IT",
     "LTIM":"IT","MPHASIS":"IT","PERSISTENT":"IT","COFORGE":"IT",
@@ -55,17 +60,20 @@ UNIVERSE = {
     "LT":"Capital Goods","SIEMENS":"Capital Goods","ABB":"Capital Goods",
     "HAVELLS":"Capital Goods","BEL":"Capital Goods","HAL":"Capital Goods",
     "BHEL":"Capital Goods","CGPOWER":"Capital Goods","THERMAX":"Capital Goods",
-    "CUMMINSIND":"Capital Goods","VOLTAS":"Capital Goods","SUZLON":"Capital Goods","KEC":"Capital Goods",
+    "CUMMINSIND":"Capital Goods","VOLTAS":"Capital Goods","SUZLON":"Capital Goods",
+    "KEC":"Capital Goods",
     "RELIANCE":"Energy","ONGC":"Energy","BPCL":"Energy","GAIL":"Energy",
     "TATAPOWER":"Energy","ADANIGREEN":"Energy","NTPC":"Energy",
     "POWERGRID":"Energy","NHPC":"Energy","TORNTPOWER":"Energy","SJVN":"Energy",
     "PIDILITIND":"Chemicals","DEEPAKNTR":"Chemicals","SRF":"Chemicals",
-    "AARTIIND":"Chemicals","NAVINFLUOR":"Chemicals","ATUL":"Chemicals","ALKYLAMINE":"Chemicals",
+    "AARTIIND":"Chemicals","NAVINFLUOR":"Chemicals","ATUL":"Chemicals",
+    "ALKYLAMINE":"Chemicals",
     "ASIANPAINT":"Paints","BERGEPAINT":"Paints","KANSAINER":"Paints",
     "TITAN":"Consumer","TRENT":"Consumer","DMART":"Consumer",
     "PAGEIND":"Consumer","JUBLFOOD":"Consumer","IRCTC":"Consumer",
     "NAUKRI":"Consumer","ZOMATO":"Consumer","INDIAMART":"Consumer",
-    "ULTRACEMCO":"Cement","SHREECEM":"Cement","AMBUJACEM":"Cement","GRASIM":"Cement","JKCEMENT":"Cement",
+    "ULTRACEMCO":"Cement","SHREECEM":"Cement","AMBUJACEM":"Cement",
+    "GRASIM":"Cement","JKCEMENT":"Cement",
     "JSWSTEEL":"Metals","TATASTEEL":"Metals","HINDALCO":"Metals",
     "VEDL":"Metals","SAIL":"Metals","COALINDIA":"Metals","APLAPOLLO":"Metals",
     "BHARTIARTL":"Telecom","TATACOMM":"Telecom",
@@ -78,28 +86,26 @@ UNIVERSE = {
 }
 
 
-# ── Transaction cost calculator ────────────────────────────────────────────
+# ── Transaction costs ──────────────────────────────────────────────────────
 def txn_cost(value, side):
     cost = value * (cfg.EXCHANGE_CHARGE + cfg.SEBI_CHARGE)
     cost += value * cfg.STAMP_DUTY  if side == "buy"  else 0
-    cost += value * cfg.STT_BUY     if side == "buy"  else 0   # ← add this
+    cost += value * cfg.STT_SELL    if side == "buy"  else 0   # STT on both sides for CNC
     cost += value * cfg.STT_SELL    if side == "sell" else 0
     return cost
 
 
-# ── Data fetching with cache ───────────────────────────────────────────────
+# ── Data loading ───────────────────────────────────────────────────────────
 def load_data():
     if os.path.exists(cfg.DATA_CACHE_FILE):
         print("Loading cached data...")
-        close  = pd.read_csv(cfg.DATA_CACHE_FILE,  index_col=0, parse_dates=True)
-        volume = pd.read_csv(cfg.VOLUME_CACHE,     index_col=0, parse_dates=True)
-        regime_df = pd.read_csv(cfg.REGIME_CACHE,  index_col=0, parse_dates=True)
+        close     = pd.read_csv(cfg.DATA_CACHE_FILE,  index_col=0, parse_dates=True)
+        volume    = pd.read_csv(cfg.VOLUME_CACHE,     index_col=0, parse_dates=True)
+        regime_df = pd.read_csv(cfg.REGIME_CACHE,     index_col=0, parse_dates=True)
         print(f"Loaded {close.shape[1]} stocks, {close.shape[0]} days.")
         return close, volume, regime_df["nifty500"], regime_df["nifty50"]
 
-    print(f"First run — downloading {len(UNIVERSE)} stocks ({cfg.DATA_FETCH_START} to {cfg.DATA_FETCH_END})...")
-    print("This takes ~4 minutes. Saved to disk after.\n")
-
+    print(f"Downloading {len(UNIVERSE)} stocks...")
     tickers = [t+".NS" for t in UNIVERSE]
     raw     = yf.download(tickers, start=cfg.DATA_FETCH_START,
                           end=cfg.DATA_FETCH_END, auto_adjust=True, progress=True)
@@ -117,51 +123,61 @@ def load_data():
     rd   = pd.DataFrame({"nifty500": r500["Close"].squeeze(),
                          "nifty50":  r50["Close"].squeeze()})
     rd.to_csv(cfg.REGIME_CACHE)
-    print(f"\nData cached. {close.shape[1]} stocks loaded.")
     return close, volume, rd["nifty500"], rd["nifty50"]
 
 
-# ── Signal functions (no lookahead bias) ───────────────────────────────────
-def regime_on(nifty500, date):
+# ── Signal helpers ─────────────────────────────────────────────────────────
+def get_regime(nifty500, date):
     d = nifty500.loc[:date].dropna()
     if len(d) < cfg.REGIME_DMA:
         return "RISK-ON"
     return "RISK-ON" if d.iloc[-1] > d.rolling(cfg.REGIME_DMA).mean().iloc[-1] else "RISK-OFF"
 
 
-def liquid_on(close, volume, date, tickers):
-    out = []
-    for t in tickers:
-        if t not in close.columns:
-            continue
-        c = close[t].loc[:date].dropna()
-        v = volume[t].loc[:date].dropna()
-        if len(c) < 60 or c.iloc[-1] < cfg.MIN_PRICE:
-            continue
-        if (c*v).rolling(60).mean().iloc[-1]/1e7 >= cfg.MIN_AVG_VALUE_CR:
-            out.append(t)
-    return out
+def is_above_100dma(close, ticker, date):
+    if ticker not in close.columns:
+        return True
+    p = close[ticker].loc[:date].dropna()
+    if len(p) < cfg.DMA_EXIT:
+        return True
+    return p.iloc[-1] >= p.rolling(cfg.DMA_EXIT).mean().iloc[-1]
 
 
-def scores_on(close, date, tickers):
-    rows, c_slice = [], close.loc[:date]
+def compute_scores_on(close, volume, date, tickers):
+    """Monthly score computation. Used for ranking and rotation."""
+    records = []
+    c_slice = close.loc[:date]
+
     for t in tickers:
         if t not in c_slice.columns:
             continue
-        p = c_slice[t].dropna()
-        if len(p) < cfg.LOOKBACK_12M + cfg.SKIP_RECENT:
+        c = c_slice[t].dropna()
+        v = volume[t].loc[:date].dropna() if t in volume.columns else pd.Series()
+
+        # Liquidity filter
+        if len(c) < 60 or c.iloc[-1] < cfg.MIN_PRICE:
             continue
-        s = cfg.SKIP_RECENT
-        p_now = p.iloc[-(s+1)]
-        mom12 = (p_now - p.iloc[-(cfg.LOOKBACK_12M+s)]) / p.iloc[-(cfg.LOOKBACK_12M+s)]
-        mom6  = (p_now - p.iloc[-(cfg.LOOKBACK_6M+s)])  / p.iloc[-(cfg.LOOKBACK_6M+s)]
-        mom3  = (p_now - p.iloc[-(cfg.LOOKBACK_3M+s)])  / p.iloc[-(cfg.LOOKBACK_3M+s)]
-        vol6  = p.iloc[-cfg.LOOKBACK_6M:].pct_change().dropna().std() * np.sqrt(252)
-        rows.append({"ticker":t,"sector":UNIVERSE.get(t,"Unknown"),
-                     "mom12":mom12,"mom6":mom6,"mom3":mom3,"vol6":vol6})
-    if not rows:
+        if len(v) >= 60:
+            if (c * v).rolling(60).mean().iloc[-1] / 1e7 < cfg.MIN_AVG_VALUE_CR:
+                continue
+
+        if len(c) < cfg.LOOKBACK_12M + cfg.SKIP_RECENT:
+            continue
+
+        s      = cfg.SKIP_RECENT
+        p_now  = c.iloc[-(s+1)]
+        mom12  = (p_now - c.iloc[-(cfg.LOOKBACK_12M+s)]) / c.iloc[-(cfg.LOOKBACK_12M+s)]
+        mom6   = (p_now - c.iloc[-(cfg.LOOKBACK_6M+s)])  / c.iloc[-(cfg.LOOKBACK_6M+s)]
+        mom3   = (p_now - c.iloc[-(cfg.LOOKBACK_3M+s)])  / c.iloc[-(cfg.LOOKBACK_3M+s)]
+        vol6   = c.iloc[-cfg.LOOKBACK_6M:].pct_change().dropna().std() * np.sqrt(252)
+
+        records.append({"ticker":t, "sector":UNIVERSE.get(t,"Unknown"),
+                        "mom12":mom12, "mom6":mom6, "mom3":mom3, "vol6":vol6})
+
+    if not records:
         return pd.DataFrame()
-    df = pd.DataFrame(rows).set_index("ticker")
+
+    df = pd.DataFrame(records).set_index("ticker")
     def z(s): return (s-s.mean())/s.std() if s.std()>0 else s*0
     df["score"] = (cfg.W_MOM_12M*z(df["mom12"]) + cfg.W_MOM_6M*z(df["mom6"]) +
                    cfg.W_MOM_3M*z(df["mom3"])   + cfg.W_VOL*z(df["vol6"]))
@@ -180,29 +196,60 @@ def pick_portfolio(scored):
     return sel
 
 
-def above_dma(close, t, date):
-    if t not in close.columns:
-        return True
-    p = close[t].loc[:date].dropna()
-    if len(p) < cfg.DMA_EXIT:
-        return True
-    return p.iloc[-1] >= p.rolling(cfg.DMA_EXIT).mean().iloc[-1]
+def find_replacement(scored, current_holdings, exits):
+    """
+    Finds immediate replacements for exited stocks.
+    Same logic as execution.py — picks best available from top 25
+    respecting sector cap and existing holdings.
+    """
+    if scored.empty:
+        return []
+
+    remaining    = [t for t in current_holdings if t not in exits]
+    top_25       = scored.head(cfg.EXIT_RANK_CUTOFF).index.tolist()
+    candidates   = [t for t in top_25 if t not in remaining]
+
+    sector_count = {}
+    for t in remaining:
+        s = UNIVERSE.get(t, "Unknown")
+        sector_count[s] = sector_count.get(s, 0) + 1
+
+    replacements = []
+    for t in candidates:
+        s = UNIVERSE.get(t, "Unknown")
+        if sector_count.get(s, 0) < cfg.MAX_PER_SECTOR:
+            replacements.append(t)
+            sector_count[s] = sector_count.get(s, 0) + 1
+        if len(replacements) == len(exits):
+            break
+
+    return replacements
+
+
+def get_price(close, ticker, date):
+    """Safe price lookup."""
+    try:
+        return float(close[ticker].loc[:date].dropna().iloc[-1])
+    except Exception:
+        return 0.0
 
 
 # ── Performance metrics ────────────────────────────────────────────────────
 def print_metrics(equity, label):
-    ret     = equity.pct_change().dropna()
-    total   = (equity.iloc[-1]/equity.iloc[0]) - 1
-    n_yr    = len(ret)/12
-    cagr    = (1+total)**(1/n_yr) - 1
-    mrf     = (1+cfg.RISK_FREE_RATE)**(1/12)-1
+    # Resample to monthly for consistent metric calculation
+    monthly = equity.resample("MS").last().dropna()
+    ret     = monthly.pct_change().dropna()
+    total   = (equity.iloc[-1] / equity.iloc[0]) - 1
+    n_yr    = len(ret) / 12
+    cagr    = (1 + total) ** (1 / n_yr) - 1 if n_yr > 0 else 0
+    mrf     = (1 + cfg.RISK_FREE_RATE) ** (1/12) - 1
     exc     = ret - mrf
-    sharpe  = exc.mean()/exc.std()*np.sqrt(12) if exc.std()>0 else 0
-    down    = exc[exc<0]
-    sortino = exc.mean()/down.std()*np.sqrt(12) if len(down)>0 and down.std()>0 else 0
+    sharpe  = exc.mean()/exc.std()*np.sqrt(12) if exc.std() > 0 else 0
+    down    = exc[exc < 0]
+    sortino = exc.mean()/down.std()*np.sqrt(12) if len(down) > 0 and down.std() > 0 else 0
     rollmax = equity.cummax()
-    maxdd   = ((equity-rollmax)/rollmax).min()
-    winrate = (ret>0).sum()/len(ret)
+    maxdd   = ((equity - rollmax) / rollmax).min()
+    winrate = (ret > 0).sum() / len(ret) if len(ret) > 0 else 0
 
     print(f"\n{'='*48}")
     print(f"  {label}")
@@ -219,139 +266,233 @@ def print_metrics(equity, label):
     return {"cagr":cagr,"sharpe":sharpe,"sortino":sortino,"maxdd":maxdd,"winrate":winrate}
 
 
-# ── Main backtest loop ─────────────────────────────────────────────────────
+# ── Main backtest ──────────────────────────────────────────────────────────
 def run_backtest():
     close, volume, nifty500, nifty50 = load_data()
 
-    all_dates     = close.loc[cfg.START_DATE:cfg.END_DATE].index
-    month_starts  = (pd.Series(all_dates)
-                     .groupby(pd.Series(all_dates).dt.to_period("M"))
-                     .first().values)
+    # All trading days in backtest window
+    all_days = close.loc[cfg.START_DATE:cfg.END_DATE].index
 
-    cash      = float(cfg.INITIAL_CAPITAL)
-    holdings  = {}   # {ticker: shares}
-    eq_curve  = []
-    trade_log = []
-    tickers   = list(UNIVERSE.keys())
+    cash        = float(cfg.INITIAL_CAPITAL)
+    holdings    = {}
+    eq_curve    = []
+    trade_log   = []
+    tickers     = list(UNIVERSE.keys())
+
+    cached_scored        = pd.DataFrame()
+    cached_top_25        = []
+    cached_top_7         = []
+    in_risk_off          = False
+    last_rebalance_month = None   # month comparison — avoids type mismatch bug
 
     print(f"\n{'='*55}")
-    print(f"  BACKTEST  |  {cfg.START_DATE} → {cfg.END_DATE}")
-    print(f"  Capital   : ₹{cash:,.0f}  |  Stocks: {cfg.TOP_N}  |  Sector cap: {cfg.MAX_PER_SECTOR}")
-    print(f"  Formula   : {cfg.W_MOM_12M}*z12M + {cfg.W_MOM_6M}*z6M + {cfg.W_MOM_3M}*z3M + {cfg.W_VOL}*zVol")
+    print(f"  BACKTEST [DAILY EXITS]  |  {cfg.START_DATE} → {cfg.END_DATE}")
+    print(f"  Capital : ₹{cfg.INITIAL_CAPITAL:,.0f}  |  Stocks: {cfg.TOP_N}  |  Sector cap: {cfg.MAX_PER_SECTOR}")
+    print(f"  Formula : {cfg.W_MOM_12M}*z12M + {cfg.W_MOM_6M}*z6M + {cfg.W_MOM_3M}*z3M + {cfg.W_VOL}*zVol")
+    print(f"  Exit monitoring: DAILY  |  Full rebalance: MONTHLY")
     print(f"{'='*55}\n")
 
-    for rb_date in month_starts:
-        date_str = pd.Timestamp(rb_date).strftime("%Y-%m-%d")
+    for day in all_days:
+        date_str    = pd.Timestamp(day).strftime("%Y-%m-%d")
+        cur_month    = pd.Timestamp(day).to_period("M")
+        # First trading day of each month = month changed since last rebalance
+        is_rebalance = (cur_month != last_rebalance_month)
 
-        # Portfolio value at start of month
-        port_val = cash
-        for t, sh in holdings.items():
-            if sh > 0 and t in close.columns:
-                try: port_val += sh * close[t].loc[:rb_date].dropna().iloc[-1]
-                except: pass
+        # ── REGIME CHECK (daily) ────────────────────────────────────────────
+        regime = get_regime(nifty500, day)
 
-        regime = regime_on(nifty500, rb_date)
-
-        # ── RISK-OFF: sell everything ────────────────────────────────────
+        # ── RISK-OFF: liquidate everything ──────────────────────────────────
         if regime == "RISK-OFF":
-            for t, sh in list(holdings.items()):
-                if sh > 0 and t in close.columns:
-                    try:
-                        px      = close[t].loc[:rb_date].dropna().iloc[-1]
-                        proceed = sh * px
-                        cost    = txn_cost(proceed, "sell")
-                        cash   += proceed - cost
-                        trade_log.append({"date":date_str,"ticker":t,"action":"SELL(OFF)",
-                                          "shares":sh,"price":px,"value":proceed,"cost":cost})
-                    except: pass
-            holdings = {}
-            eq_curve.append({"date":rb_date,"value":cash,"regime":"OFF"})
-            print(f"{date_str} | RISK-OFF  | Cash : ₹{cash:>12,.0f}")
+            if not in_risk_off:
+                # First day of risk-off — sell everything
+                for t, sh in list(holdings.items()):
+                    if sh > 0 and t in close.columns:
+                        px = get_price(close, t, day)
+                        if px > 0:
+                            proceeds = sh * px
+                            cost     = txn_cost(proceeds, "sell")
+                            cash    += proceeds - cost
+                            trade_log.append({
+                                "date":date_str,"ticker":t,"action":"SELL(RISK-OFF)",
+                                "shares":sh,"price":px,"value":proceeds,"cost":cost
+                            })
+                holdings     = {}
+                in_risk_off  = True
+                cached_scored = pd.DataFrame()
+                cached_top_25 = []
+                cached_top_7  = []
+
+            # Record daily value (all cash)
+            eq_curve.append({"date":day,"value":cash,"regime":"OFF"})
+
+            if is_rebalance:
+                print(f"{date_str} | RISK-OFF  | Cash : ₹{cash:>12,.0f}")
             continue
 
-        # ── RISK-ON: generate signals ────────────────────────────────────
-        liquid  = liquid_on(close, volume, rb_date, tickers)
-        scored  = scores_on(close, rb_date, liquid)
-        if scored.empty:
-            eq_curve.append({"date":rb_date,"value":port_val,"regime":"ON"})
-            continue
+        # ── RISK-ON ─────────────────────────────────────────────────────────
+        in_risk_off = False
 
-        top25   = scored.head(cfg.EXIT_RANK_CUTOFF).index.tolist()
-        new_port = pick_portfolio(scored)
+        # ── REBALANCE DAY: recompute full scores ─────────────────────────────
+        if is_rebalance:
+            cached_scored = compute_scores_on(close, volume, day, tickers)
+            if not cached_scored.empty:
+                cached_top_25 = cached_scored.head(cfg.EXIT_RANK_CUTOFF).index.tolist()
+                cached_top_7  = pick_portfolio(cached_scored)
 
-        # ── Exit rules ───────────────────────────────────────────────────
-        for t, sh in list(holdings.items()):
-            if sh == 0: continue
-            sell = (t not in top25) or (not above_dma(close, t, rb_date))
-            if sell:
-                try:
-                    px      = close[t].loc[:rb_date].dropna().iloc[-1]
-                    proceed = sh * px
-                    cost    = txn_cost(proceed, "sell")
-                    cash   += proceed - cost
-                    reason  = "100DMA" if not above_dma(close,t,rb_date) else "RANK"
-                    trade_log.append({"date":date_str,"ticker":t,"action":f"SELL({reason})",
-                                      "shares":sh,"price":px,"value":proceed,"cost":cost})
+        # ── DAILY EXIT CHECK ─────────────────────────────────────────────────
+        # Check every current holding against exit rules using today's prices
+        current_held = [t for t, s in holdings.items() if s > 0]
+        exits        = []
+
+        for t in current_held:
+            exit_reason = None
+
+            # Rule 1: dropped out of top 25 (using cached monthly scores)
+            if cached_top_25 and t not in cached_top_25:
+                exit_reason = "rank"
+
+            # Rule 2: price below 100 DMA (checked with today's price)
+            if t in close.columns and not is_above_100dma(close, t, day):
+                exit_reason = "100DMA"
+
+            if exit_reason:
+                exits.append((t, exit_reason))
+
+        # ── PROCESS EXITS + IMMEDIATE REPLACEMENT ───────────────────────────
+        exit_tickers = [t for t, _ in exits]
+
+        for t, reason in exits:
+            sh = holdings.get(t, 0)
+            if sh > 0:
+                px = get_price(close, t, day)
+                if px > 0:
+                    proceeds = sh * px
+                    cost     = txn_cost(proceeds, "sell")
+                    cash    += proceeds - cost
+                    trade_log.append({
+                        "date":date_str,"ticker":t,"action":f"SELL({reason})",
+                        "shares":sh,"price":px,"value":proceeds,"cost":cost
+                    })
                     holdings[t] = 0
-                except: pass
 
-        # ── Recompute portfolio value before buying ──────────────────────
-        port_val = cash
-        for t, sh in holdings.items():
-            if sh > 0 and t in close.columns:
-                try: port_val += sh * close[t].loc[:rb_date].dropna().iloc[-1]
-                except: pass
+        # Immediately find and buy replacements for exits
+        if exit_tickers and not cached_scored.empty:
+            replacements = find_replacement(cached_scored, current_held, exit_tickers)
 
-        target = port_val / cfg.TOP_N
+            # Compute target allocation
+            port_val = cash
+            for t, sh in holdings.items():
+                if sh > 0:
+                    px = get_price(close, t, day)
+                    port_val += sh * px
 
-        # ── Buy new / top-up positions ───────────────────────────────────
-        for t in new_port:
-            try:
-                px      = close[t].loc[:rb_date].dropna().iloc[-1]
+            target = port_val / cfg.TOP_N
+
+            for t in replacements:
+                px = get_price(close, t, day)
+                if px <= 0:
+                    continue
                 cur_val = holdings.get(t, 0) * px
                 if cur_val < target * 0.95:
-                    buy_val = target - cur_val
-                    n_shares = int(buy_val / px)
-                    cost_buy = n_shares * px
-                    tc       = txn_cost(cost_buy, "buy")
-                    if n_shares > 0 and cash >= cost_buy + tc:
-                        cash -= (cost_buy + tc)
-                        holdings[t] = holdings.get(t,0) + n_shares
-                        trade_log.append({"date":date_str,"ticker":t,"action":"BUY",
-                                          "shares":n_shares,"price":px,"value":cost_buy,"cost":tc})
-            except: pass
+                    n    = int((target - cur_val) / px)
+                    cost = n * px
+                    tc   = txn_cost(cost, "buy")
+                    if n > 0 and cash >= cost + tc:
+                        cash -= (cost + tc)
+                        holdings[t] = holdings.get(t, 0) + n
+                        trade_log.append({
+                            "date":date_str,"ticker":t,"action":"BUY(replacement)",
+                            "shares":n,"price":px,"value":cost,"cost":tc
+                        })
 
-        # ── Record month value ───────────────────────────────────────────
-        month_val = cash
+        # ── MONTHLY FULL ROTATION ────────────────────────────────────────────
+        # On rebalance day: rotate underperformers + top up to full allocation
+        if is_rebalance and not cached_scored.empty:
+            current_held_after = [t for t, s in holdings.items() if s > 0]
+
+            # Find holdings not in current top 7 — rotate them out
+            rotate_out = [t for t in current_held_after if t not in cached_top_7]
+            for t in rotate_out:
+                sh = holdings.get(t, 0)
+                if sh > 0:
+                    px = get_price(close, t, day)
+                    if px > 0:
+                        proceeds = sh * px
+                        cost     = txn_cost(proceeds, "sell")
+                        cash    += proceeds - cost
+                        trade_log.append({
+                            "date":date_str,"ticker":t,"action":"SELL(rotation)",
+                            "shares":sh,"price":px,"value":proceeds,"cost":cost
+                        })
+                        holdings[t] = 0
+
+            # Recompute portfolio value
+            port_val = cash
+            for t, sh in holdings.items():
+                if sh > 0:
+                    port_val += get_price(close, t, day) * sh
+
+            target = port_val / cfg.TOP_N
+
+            # Buy top 7 (new positions + top-ups)
+            for t in cached_top_7:
+                px = get_price(close, t, day)
+                if px <= 0:
+                    continue
+                cur_val = holdings.get(t, 0) * px
+                if cur_val < target * 0.95:
+                    n    = int((target - cur_val) / px)
+                    cost = n * px
+                    tc   = txn_cost(cost, "buy")
+                    if n > 0 and cash >= cost + tc:
+                        cash -= (cost + tc)
+                        holdings[t] = holdings.get(t, 0) + n
+                        trade_log.append({
+                            "date":date_str,"ticker":t,"action":"BUY",
+                            "shares":n,"price":px,"value":cost,"cost":tc
+                        })
+
+            # Print monthly summary
+            held = [t for t, s in holdings.items() if s > 0]
+            port_val = cash + sum(
+                holdings.get(t,0) * get_price(close,t,day)
+                for t in held
+            )
+            print(f"{date_str} | RISK-ON   | ₹{port_val:>12,.0f} | {', '.join(held[:7])}")
+            last_rebalance_month = cur_month
+
+        # ── RECORD DAILY PORTFOLIO VALUE ─────────────────────────────────────
+        day_val = cash
         for t, sh in holdings.items():
-            if sh > 0 and t in close.columns:
-                try: month_val += sh * close[t].loc[:rb_date].dropna().iloc[-1]
-                except: pass
+            if sh > 0:
+                day_val += sh * get_price(close, t, day)
+        eq_curve.append({"date":day,"value":day_val,"regime":"ON"})
 
-        eq_curve.append({"date":rb_date,"value":month_val,"regime":"ON"})
-        held = [t for t,s in holdings.items() if s>0]
-        print(f"{date_str} | RISK-ON   | ₹{month_val:>12,.0f} | {', '.join(held[:7])}")
-
-    # ── Results ───────────────────────────────────────────────────────────
-    eq_df = pd.DataFrame(eq_curve).set_index("date")
+    # ── Build equity curve ─────────────────────────────────────────────────
+    eq_df  = pd.DataFrame(eq_curve).set_index("date")
     eq_df.index = pd.to_datetime(eq_df.index)
     equity = eq_df["value"]
 
-    bench_raw   = nifty50.loc[cfg.START_DATE:cfg.END_DATE].resample("MS").first().dropna()
+    # Benchmark
+    bench_raw   = nifty50.loc[cfg.START_DATE:cfg.END_DATE].dropna()
     bench_curve = (bench_raw / bench_raw.iloc[0]) * cfg.INITIAL_CAPITAL
 
-    m_strat = print_metrics(equity,      "STRATEGY  — Aggressive Momentum")
-    m_bench = print_metrics(bench_curve, "BENCHMARK — Nifty 50 Buy & Hold")
+    # ── Print results ──────────────────────────────────────────────────────
+    m_s = print_metrics(equity,      "STRATEGY [DAILY EXITS] — Aggressive Momentum")
+    m_b = print_metrics(bench_curve, "BENCHMARK              — Nifty 50 Buy & Hold")
 
     print(f"\n{'='*48}")
     print(f"  Outperformance vs Nifty 50")
-    print(f"  CAGR delta   : {(m_strat['cagr']-m_bench['cagr'])*100:+.1f}% per year")
-    print(f"  Sharpe delta : {m_strat['sharpe']-m_bench['sharpe']:+.2f}")
+    print(f"  CAGR delta   : {(m_s['cagr']-m_b['cagr'])*100:+.1f}% per year")
+    print(f"  Sharpe delta : {m_s['sharpe']-m_b['sharpe']:+.2f}")
+    print(f"  DD improvement: {(m_b['maxdd']-m_s['maxdd'])*100:+.1f}%")
     print(f"{'='*48}")
 
-    equity.to_csv("equity_curve.csv")
-    pd.DataFrame(trade_log).to_csv("trade_log.csv", index=False)
-    print("\nSaved: equity_curve.csv  |  trade_log.csv")
+    # Save outputs
+    equity.to_csv("equity_curve_daily.csv")
+    pd.DataFrame(trade_log).to_csv("trade_log_daily.csv", index=False)
+    print(f"\nSaved: equity_curve_daily.csv  |  trade_log_daily.csv")
+    print(f"Total trades executed: {len(trade_log)}")
 
 
 if __name__ == "__main__":
