@@ -59,8 +59,8 @@ STAMP_DUTY      = 0.00015
 # ─────────────────────────────────────────────
 # Change these two lines
 # config.py — change back to original
-START_DATE = "2020-01-01"
-END_DATE   = "2024-12-31"
+START_DATE = "2025-05-01"
+END_DATE   = "2026-5-22"
 INITIAL_CAPITAL = 100000      # ₹1 lakh (results scale %-wise regardless)
 RISK_FREE_RATE  = 0.065       # 6.5% — India 10yr G-Sec
 
