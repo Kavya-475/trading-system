@@ -13,24 +13,16 @@ def run_pipeline():
         log.info("Weekend — skipping")
         return
 
-    # Step 1: Login to Kite — get fresh access token
+    # Step 1: Kite login
     try:
+        import asyncio
         from kite_login import get_access_token
-        get_access_token()
+        asyncio.run(get_access_token())
         log.info("Kite login successful")
     except Exception as e:
         log.error(f"Kite login failed: {e}")
-        try:
-            import requests
-            token = os.getenv("TELEGRAM_BOT_TOKEN","")
-            chat  = os.getenv("TELEGRAM_CHAT_ID","")
-            if token and chat:
-                requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
-                    data={"chat_id":chat,"text":f"⚠️ Kite Login Failed: {e}"},timeout=10)
-        except: pass
-        return  # Don't proceed if login failed
 
-    # Step 2: Update data cache
+    # Step 2: Update cache
     try:
         from data_manager import update_cache
         update_cache()
@@ -38,7 +30,7 @@ def run_pipeline():
     except Exception as e:
         log.error(f"Cache failed: {e}")
 
-    # Step 3: Run execution
+    # Step 3: Execute
     try:
         from execution import run_execution
         run_execution()
@@ -51,7 +43,7 @@ def run_pipeline():
             chat  = os.getenv("TELEGRAM_CHAT_ID","")
             if token and chat:
                 requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
-                    data={"chat_id":chat,"text":f"⚠️ Error: {e}"},timeout=10)
+                    data={"chat_id":chat,"text":f"Error: {e}"},timeout=10)
         except: pass
 
     log.info("SCHEDULER DONE")

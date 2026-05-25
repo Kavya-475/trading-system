@@ -117,3 +117,17 @@
 2026-05-24 12:58:58 | INFO | Holdings saved: {}
 2026-05-24 12:58:58 | INFO | Telegram notification sent
 2026-05-24 12:58:58 | INFO | Liquidation complete. Holding 100% cash.
+2026-05-25 03:39:45 | INFO | =======================================================
+2026-05-25 03:39:45 | INFO | EXECUTION RUN — 2026-05-25 03:39:45
+2026-05-25 03:39:45 | INFO | MODE          : PAPER
+2026-05-25 03:39:45 | INFO | TYPE          : MONITORING + EXIT CHECK
+2026-05-25 03:39:45 | INFO | =======================================================
+2026-05-25 03:39:45 | INFO | Current holdings: None (empty)
+2026-05-25 03:39:45 | INFO | Loaded latest prices for 149 stocks from cache
+2026-05-25 03:39:45 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-25 03:39:45 | INFO | Running signal engine...
+2026-05-25 03:39:45 | INFO | Regime: RISK-OFF
+2026-05-25 03:39:45 | INFO | RISK-OFF — liquidating all positions immediately
+2026-05-25 03:39:45 | INFO | Holdings saved: {}
+2026-05-25 03:39:46 | INFO | Telegram notification sent
+2026-05-25 03:39:46 | INFO | Liquidation complete.
