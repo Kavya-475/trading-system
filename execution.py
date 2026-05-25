@@ -328,7 +328,9 @@ def run_execution():
     log.info(f"EXECUTION RUN — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     log.info(f"MODE          : {'PAPER' if PAPER_MODE else '⚠️  LIVE'}")
 
-    rebalance = is_rebalance_day()
+    # Force rebalance if holdings are empty and market is RISK-ON
+    # This handles: first run, and return from RISK-OFF to RISK-ON
+    rebalance = is_rebalance_day() or len(current_tickers) == 0
     log.info(f"TYPE          : {'FULL REBALANCE' if rebalance else 'MONITORING + EXIT CHECK'}")
     log.info("=" * 55)
 
