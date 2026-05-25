@@ -175,21 +175,79 @@ def get_kite_client():
 def load_holdings() -> dict:
     if os.path.exists(HOLDINGS_FILE):
         with open(HOLDINGS_FILE, "r") as f:
-            return json.load(f)
+            raw = json.load(f)
+        migrated = {}
+        for ticker, val in raw.items():
+            if isinstance(val, (int, float)):
+                migrated[ticker] = {"shares": int(val), "avg_price": 0.0, "entry_date": "unknown"}
+            else:
+                migrated[ticker] = val
+        return migrated
     return {}
 
 
 def save_holdings(holdings: dict):
     with open(HOLDINGS_FILE, "w") as f:
         json.dump(holdings, f, indent=2)
-    log.info(f"Holdings saved: { {t:s for t,s in holdings.items() if s>0} }")
+    log.info(f"Holdings saved: { {t: get_shares(holdings,t) for t in holdings if get_shares(holdings,t) > 0} }")
 
+
+
+
+def get_shares(holdings: dict, ticker: str) -> int:
+    val = holdings.get(ticker, {})
+    return val.get("shares", 0) if isinstance(val, dict) else int(val or 0)
+
+def get_avg_price(holdings: dict, ticker: str) -> float:
+    val = holdings.get(ticker, {})
+    return val.get("avg_price", 0.0) if isinstance(val, dict) else 0.0
+
+def set_holding(holdings: dict, ticker: str, shares: int,
+                avg_price: float = 0.0, entry_date: str = ""):
+    holdings[ticker] = {
+        "shares"    : shares,
+        "avg_price" : avg_price,
+        "entry_date": entry_date or str(date.today())
+    }
+
+def build_pnl_summary(holdings: dict, prices: dict) -> str:
+    lines       = []
+    total_cost  = 0.0
+    total_value = 0.0
+    for ticker in holdings:
+        shares    = get_shares(holdings, ticker)
+        avg_price = get_avg_price(holdings, ticker)
+        if shares <= 0:
+            continue
+        cur       = prices.get(ticker, 0.0)
+        cost      = shares * avg_price
+        value     = shares * cur
+        pnl       = value - cost
+        pnl_pct   = (pnl / cost * 100) if cost > 0 else 0.0
+        total_cost  += cost
+        total_value += value
+        sign = "+" if pnl >= 0 else "-"
+        lines.append(
+            sign + " " + ticker.ljust(12) + " x" + str(shares).ljust(4) +
+            " @ " + f"{cur:>8.1f}" +
+            "  PnL: " + f"{pnl:>+8.0f}" +
+            " (" + f"{pnl_pct:>+.1f}" + "%)"
+        )
+    total_pnl     = total_value - total_cost
+    total_pnl_pct = (total_pnl / total_cost * 100) if total_cost > 0 else 0.0
+    sep = "-" * 40
+    result = chr(10).join(lines)
+    result += chr(10) + sep
+    result += chr(10) + "Total PnL: " + f"{total_pnl:>+,.0f}" + " (" + f"{total_pnl_pct:>+.1f}" + "%)"
+    result += chr(10) + "Invested:  " + f"{total_cost:>10,.0f}"
+    result += chr(10) + "Value:     " + f"{total_value:>10,.0f}"
+    return result
 
 def get_portfolio_value(kite, holdings: dict, prices: dict) -> float:
     if PAPER_MODE:
         stock_value = sum(
-            shares * prices.get(ticker, 0)
-            for ticker, shares in holdings.items() if shares > 0
+            get_shares(holdings, ticker) * prices.get(ticker, 0)
+            for ticker in holdings if get_shares(holdings, ticker) > 0
         )
         return CAPITAL + stock_value
     try:
@@ -315,7 +373,11 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
                 res = place_buy_order(kite, ticker, shares_to_buy, limit_price)
                 buy_lines.append(f"BUY {ticker} ×{shares_to_buy} @ ₹{limit_price}")
                 if res["status"] in ("paper", "placed"):
-                    holdings[ticker] = current_shares + shares_to_buy
+                    existing_shares = get_shares(holdings, ticker)
+                    new_shares = existing_shares + shares_to_buy
+                    old_avg = get_avg_price(holdings, ticker)
+                    new_avg = (old_avg * existing_shares + px * shares_to_buy) / new_shares if existing_shares > 0 and old_avg > 0 else px
+                    set_holding(holdings, ticker, new_shares, new_avg)
 
     return buy_lines
 
@@ -333,7 +395,7 @@ def run_execution():
 
     # ── Load state ─────────────────────────────────────────────────────────
     holdings        = load_holdings()
-    current_tickers = [t for t, s in holdings.items() if s > 0]
+    current_tickers = [t for t in holdings if get_shares(holdings, t) > 0]
     rebalance = is_rebalance_day() or len(current_tickers) == 0
     log.info(f"Current holdings: {current_tickers or 'None (empty)'}")
 
@@ -368,7 +430,7 @@ def run_execution():
                 res        = place_sell_order(kite, ticker, shares, sell_price)
                 sell_lines.append(f"SELL {ticker} ×{shares} @ ₹{sell_price}")
                 if res["status"] in ("paper", "placed"):
-                    holdings[ticker] = 0
+                    set_holding(holdings, ticker, 0)
         save_holdings(holdings)
         send_telegram(
             f"🔴 *RISK-OFF — Market Alert*\n"
@@ -400,7 +462,7 @@ def run_execution():
                 res        = place_sell_order(kite, ticker, shares, sell_price)
                 sell_lines.append(f"SELL {ticker} ×{shares} @ ₹{sell_price}")
                 if res["status"] in ("paper", "placed"):
-                    holdings[ticker] = 0
+                    set_holding(holdings, ticker, 0)
 
         # ── Immediately find and buy replacements ───────────────────────────
         # This is the key change — don't wait for month-end rebalance
@@ -440,7 +502,7 @@ def run_execution():
                 res        = place_sell_order(kite, ticker, shares, sell_price)
                 sell_lines.append(f"SELL {ticker} ×{shares} @ ₹{sell_price} [rotation]")
                 if res["status"] in ("paper", "placed"):
-                    holdings[ticker] = 0
+                    set_holding(holdings, ticker, 0)
 
         # Buy full top 7 (including rotations)
         port_value    = get_portfolio_value(kite, holdings, latest_prices)
@@ -452,7 +514,7 @@ def run_execution():
     # ── Save and notify ─────────────────────────────────────────────────────
     save_holdings(holdings)
 
-    held_now  = [f"{t} ×{s}" for t, s in holdings.items() if s > 0]
+    held_now  = [t for t in holdings if get_shares(holdings, t) > 0]
     mode_icon = "📋" if PAPER_MODE else "✅"
     run_type  = "Full Rebalance" if rebalance else "Monitoring"
 
@@ -469,11 +531,12 @@ def run_execution():
     if not sell_lines and not buy_lines:
         msg += "_No changes today_\n\n"
     if held_now:
-        msg += "*Portfolio:*\n" + "\n".join(held_now)
+        msg += "*Portfolio & P&L:*\n"
+        msg += build_pnl_summary(holdings, latest_prices)
 
     send_telegram(msg)
 
-    log.info(f"Final portfolio: {[t for t,s in holdings.items() if s>0]}")
+    log.info(f"Final portfolio: {[t for t in holdings if get_shares(holdings, t) > 0]}")
     log.info("=" * 55)
 
 
