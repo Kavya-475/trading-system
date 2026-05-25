@@ -75,3 +75,7 @@ VOLUME_CACHE     = "volume_data_cache.csv"
 REGIME_CACHE     = "regime_data_cache.csv"
 BENCHMARK_TICKER = "^NSEI"        # Nifty 50
 REGIME_TICKER    = "^CRSLDX"      # Nifty 500
+# ─────────────────────────────────────────────
+# PAPER TESTING FLAGS
+# ─────────────────────────────────────────────
+FORCE_RISK_ON = True  # Set False before going live

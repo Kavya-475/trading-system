@@ -203,3 +203,30 @@
 2026-05-25 04:01:31 | INFO | Telegram notification sent
 2026-05-25 04:01:31 | INFO | Final portfolio: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
 2026-05-25 04:01:31 | INFO | =======================================================
+2026-05-25 04:20:35 | INFO | =======================================================
+2026-05-25 04:20:35 | INFO | EXECUTION RUN — 2026-05-25 04:20:35
+2026-05-25 04:20:35 | INFO | MODE          : PAPER
+2026-05-25 04:21:49 | INFO | =======================================================
+2026-05-25 04:21:49 | INFO | EXECUTION RUN — 2026-05-25 04:21:49
+2026-05-25 04:21:49 | INFO | MODE          : PAPER
+2026-05-25 04:24:59 | INFO | =======================================================
+2026-05-25 04:24:59 | INFO | EXECUTION RUN — 2026-05-25 04:24:59
+2026-05-25 04:24:59 | INFO | MODE          : PAPER
+2026-05-25 04:24:59 | INFO | =======================================================
+2026-05-25 04:24:59 | INFO | Current holdings: None (empty)
+2026-05-25 04:24:59 | INFO | Loaded latest prices for 149 stocks from cache
+2026-05-25 04:24:59 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-25 04:24:59 | INFO | Running signal engine...
+2026-05-25 04:25:00 | INFO | Regime: RISK-ON
+2026-05-25 04:25:00 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-25 04:25:00 | INFO | [PAPER] BUY  | MCX             |     4 shares @ ₹  3316.5 | Total: ₹    13,266
+2026-05-25 04:25:00 | INFO | [PAPER] BUY  | BHARATFORG      |     7 shares @ ₹  1924.4 | Total: ₹    13,471
+2026-05-25 04:25:00 | INFO | [PAPER] BUY  | CUMMINSIND      |     2 shares @ ₹  5446.1 | Total: ₹    10,892
+2026-05-25 04:25:00 | INFO | [PAPER] BUY  | BSE             |     3 shares @ ₹  4271.2 | Total: ₹    12,814
+2026-05-25 04:25:00 | INFO | [PAPER] BUY  | BHEL            |    34 shares @ ₹   414.1 | Total: ₹    14,079
+2026-05-25 04:25:00 | INFO | [PAPER] BUY  | HINDALCO        |    12 shares @ ₹  1115.5 | Total: ₹    13,386
+2026-05-25 04:25:00 | INFO | [PAPER] BUY  | SAIL            |    70 shares @ ₹   203.4 | Total: ₹    14,238
+2026-05-25 04:25:00 | INFO | Holdings saved: {'MCX': 4, 'BHARATFORG': 7, 'CUMMINSIND': 2, 'BSE': 3, 'BHEL': 34, 'HINDALCO': 12, 'SAIL': 70}
+2026-05-25 04:25:01 | INFO | Telegram notification sent
+2026-05-25 04:25:01 | INFO | Final portfolio: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+2026-05-25 04:25:01 | INFO | =======================================================

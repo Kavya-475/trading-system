@@ -247,8 +247,10 @@ def run_signals(current_holdings: list = []) -> dict:
 
     if regime == "RISK-OFF":
         print("\nRISK-OFF → Hold cash. Sell all holdings.")
-    
-    # return {"regime":regime,"portfolio":pd.DataFrame(),"exits":current_holdings}
+        if cfg.FORCE_RISK_ON:
+            regime = "RISK-ON"  # Paper test override
+        else:
+            return {"regime":regime,"portfolio":pd.DataFrame(),"exits":current_holdings}
     tickers  = list(UNIVERSE.keys())
     liquid   = apply_liquidity_filter(close, volume, tickers)
     print(f"\nComputing scores for {len(liquid)} stocks...")

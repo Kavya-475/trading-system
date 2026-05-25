@@ -329,14 +329,12 @@ def run_execution():
     log.info(f"MODE          : {'PAPER' if PAPER_MODE else '⚠️  LIVE'}")
 
     # Force rebalance if holdings are empty and market is RISK-ON
-    # This handles: first run, and return from RISK-OFF to RISK-ON
-    rebalance = is_rebalance_day() or len(current_tickers) == 0
-    log.info(f"TYPE          : {'FULL REBALANCE' if rebalance else 'MONITORING + EXIT CHECK'}")
     log.info("=" * 55)
 
     # ── Load state ─────────────────────────────────────────────────────────
     holdings        = load_holdings()
     current_tickers = [t for t, s in holdings.items() if s > 0]
+    rebalance = is_rebalance_day() or len(current_tickers) == 0
     log.info(f"Current holdings: {current_tickers or 'None (empty)'}")
 
     # ── Load prices and data ────────────────────────────────────────────────
@@ -352,6 +350,8 @@ def run_execution():
     log.info("Running signal engine...")
     signals   = run_signals(current_tickers)
     regime    = signals["regime"]
+    if cfg.FORCE_RISK_ON:
+        regime = "RISK-ON"  # Paper test override
     portfolio = signals["portfolio"]
     exits     = signals["exits"]
     log.info(f"Regime: {regime}")
