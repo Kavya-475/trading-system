@@ -376,7 +376,7 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
                     existing_shares = get_shares(holdings, ticker)
                     new_shares = existing_shares + shares_to_buy
                     old_avg = get_avg_price(holdings, ticker)
-                    new_avg = (old_avg * existing_shares + px * shares_to_buy) / new_shares if existing_shares > 0 and old_avg > 0 else px
+                    new_avg = (old_avg * existing_shares + price * shares_to_buy) / new_shares if existing_shares > 0 and old_avg > 0 else price
                     set_holding(holdings, ticker, new_shares, new_avg)
 
     return buy_lines

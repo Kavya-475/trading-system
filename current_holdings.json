@@ -1,9 +1,32 @@
 {
-  "MCX": 4,
-  "BHARATFORG": 7,
-  "CUMMINSIND": 2,
-  "BSE": 3,
-  "BHEL": 34,
-  "HINDALCO": 12,
-  "SAIL": 70
+  "NATIONALUM": {
+    "shares": 35,
+    "avg_price": 402.75,
+    "entry_date": "2026-05-25"
+  },
+  "GVT&D": {
+    "shares": 2,
+    "avg_price": 4771.39990234375,
+    "entry_date": "2026-05-25"
+  },
+  "APARINDS": {
+    "shares": 1,
+    "avg_price": 12524.0,
+    "entry_date": "2026-05-25"
+  },
+  "MCX": {
+    "shares": 4,
+    "avg_price": 3336.0,
+    "entry_date": "2026-05-25"
+  },
+  "BHARATFORG": {
+    "shares": 7,
+    "avg_price": 1916.5,
+    "entry_date": "2026-05-25"
+  },
+  "ADANIPOWER": {
+    "shares": 61,
+    "avg_price": 232.25,
+    "entry_date": "2026-05-25"
+  }
 }
