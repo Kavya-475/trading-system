@@ -131,3 +131,75 @@
 2026-05-25 03:39:45 | INFO | Holdings saved: {}
 2026-05-25 03:39:46 | INFO | Telegram notification sent
 2026-05-25 03:39:46 | INFO | Liquidation complete.
+2026-05-25 03:47:34 | INFO | =======================================================
+2026-05-25 03:47:34 | INFO | EXECUTION RUN — 2026-05-25 03:47:34
+2026-05-25 03:47:34 | INFO | MODE          : PAPER
+2026-05-25 03:47:34 | INFO | TYPE          : MONITORING + EXIT CHECK
+2026-05-25 03:47:34 | INFO | =======================================================
+2026-05-25 03:47:34 | INFO | Current holdings: None (empty)
+2026-05-25 03:47:34 | INFO | Loaded latest prices for 149 stocks from cache
+2026-05-25 03:47:34 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-25 03:47:34 | INFO | Running signal engine...
+2026-05-25 03:47:34 | INFO | Regime: RISK-ON
+2026-05-25 03:47:35 | INFO | Holdings saved: {}
+2026-05-25 03:47:35 | INFO | Telegram notification sent
+2026-05-25 03:47:35 | INFO | Final portfolio: []
+2026-05-25 03:47:35 | INFO | =======================================================
+2026-05-25 03:52:17 | INFO | =======================================================
+2026-05-25 03:52:17 | INFO | EXECUTION RUN — 2026-05-25 03:52:17
+2026-05-25 03:52:17 | INFO | MODE          : PAPER
+2026-05-25 03:52:17 | INFO | TYPE          : MONITORING + EXIT CHECK
+2026-05-25 03:52:17 | INFO | =======================================================
+2026-05-25 03:52:17 | INFO | Current holdings: None (empty)
+2026-05-25 03:52:17 | INFO | Loaded latest prices for 149 stocks from cache
+2026-05-25 03:52:17 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-25 03:52:17 | INFO | Running signal engine...
+2026-05-25 03:52:18 | INFO | Regime: RISK-ON
+2026-05-25 03:52:18 | INFO | Holdings saved: {}
+2026-05-25 03:52:19 | INFO | Telegram notification sent
+2026-05-25 03:52:19 | INFO | Final portfolio: []
+2026-05-25 03:52:19 | INFO | =======================================================
+2026-05-25 04:01:01 | INFO | =======================================================
+2026-05-25 04:01:01 | INFO | EXECUTION RUN — 2026-05-25 04:01:01
+2026-05-25 04:01:01 | INFO | MODE          : PAPER
+2026-05-25 04:01:01 | INFO | TYPE          : FULL REBALANCE
+2026-05-25 04:01:01 | INFO | =======================================================
+2026-05-25 04:01:01 | INFO | Current holdings: None (empty)
+2026-05-25 04:01:01 | INFO | Loaded latest prices for 149 stocks from cache
+2026-05-25 04:01:01 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-25 04:01:01 | INFO | Running signal engine...
+2026-05-25 04:01:02 | INFO | Regime: RISK-ON
+2026-05-25 04:01:02 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-25 04:01:02 | INFO | [PAPER] BUY  | MCX             |     4 shares @ ₹  3316.5 | Total: ₹    13,266
+2026-05-25 04:01:02 | INFO | [PAPER] BUY  | BHARATFORG      |     7 shares @ ₹  1924.4 | Total: ₹    13,471
+2026-05-25 04:01:02 | INFO | [PAPER] BUY  | CUMMINSIND      |     2 shares @ ₹  5446.1 | Total: ₹    10,892
+2026-05-25 04:01:02 | INFO | [PAPER] BUY  | BSE             |     3 shares @ ₹  4271.2 | Total: ₹    12,814
+2026-05-25 04:01:02 | INFO | [PAPER] BUY  | BHEL            |    34 shares @ ₹   414.1 | Total: ₹    14,079
+2026-05-25 04:01:02 | INFO | [PAPER] BUY  | HINDALCO        |    12 shares @ ₹  1115.5 | Total: ₹    13,386
+2026-05-25 04:01:02 | INFO | [PAPER] BUY  | SAIL            |    70 shares @ ₹   203.4 | Total: ₹    14,238
+2026-05-25 04:01:02 | INFO | Holdings saved: {'MCX': 4, 'BHARATFORG': 7, 'CUMMINSIND': 2, 'BSE': 3, 'BHEL': 34, 'HINDALCO': 12, 'SAIL': 70}
+2026-05-25 04:01:03 | INFO | Telegram notification sent
+2026-05-25 04:01:03 | INFO | Final portfolio: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+2026-05-25 04:01:03 | INFO | =======================================================
+2026-05-25 04:01:30 | INFO | =======================================================
+2026-05-25 04:01:30 | INFO | EXECUTION RUN — 2026-05-25 04:01:30
+2026-05-25 04:01:30 | INFO | MODE          : PAPER
+2026-05-25 04:01:30 | INFO | TYPE          : FULL REBALANCE
+2026-05-25 04:01:30 | INFO | =======================================================
+2026-05-25 04:01:30 | INFO | Current holdings: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+2026-05-25 04:01:30 | INFO | Loaded latest prices for 149 stocks from cache
+2026-05-25 04:01:30 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-25 04:01:30 | INFO | Running signal engine...
+2026-05-25 04:01:30 | INFO | Regime: RISK-ON
+2026-05-25 04:01:31 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-25 04:01:31 | INFO | [PAPER] BUY  | MCX             |     4 shares @ ₹  3316.5 | Total: ₹    13,266
+2026-05-25 04:01:31 | INFO | [PAPER] BUY  | BHARATFORG      |     7 shares @ ₹  1924.4 | Total: ₹    13,471
+2026-05-25 04:01:31 | INFO | [PAPER] BUY  | CUMMINSIND      |     3 shares @ ₹  5446.1 | Total: ₹    16,338
+2026-05-25 04:01:31 | INFO | [PAPER] BUY  | BSE             |     3 shares @ ₹  4271.2 | Total: ₹    12,814
+2026-05-25 04:01:31 | INFO | [PAPER] BUY  | BHEL            |    32 shares @ ₹   414.1 | Total: ₹    13,251
+2026-05-25 04:01:31 | INFO | [PAPER] BUY  | HINDALCO        |    12 shares @ ₹  1115.5 | Total: ₹    13,386
+2026-05-25 04:01:31 | INFO | [PAPER] BUY  | SAIL            |    65 shares @ ₹   203.4 | Total: ₹    13,221
+2026-05-25 04:01:31 | INFO | Holdings saved: {'MCX': 8, 'BHARATFORG': 14, 'CUMMINSIND': 5, 'BSE': 6, 'BHEL': 66, 'HINDALCO': 24, 'SAIL': 135}
+2026-05-25 04:01:31 | INFO | Telegram notification sent
+2026-05-25 04:01:31 | INFO | Final portfolio: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+2026-05-25 04:01:31 | INFO | =======================================================
