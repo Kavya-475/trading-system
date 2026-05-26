@@ -10,8 +10,8 @@ AGGRESSIVE configuration selected on 2026-05-23.
 # ─────────────────────────────────────────────
 # PORTFOLIO CONSTRUCTION
 # ─────────────────────────────────────────────
-TOP_N             = 7      # stocks to hold simultaneously (was 10)
-MAX_PER_SECTOR    = 3      # max stocks from one sector (was 2)
+TOP_N            = 12
+MAX_PER_SECTOR   = 3
 EXIT_RANK_CUTOFF  = 25     # sell if rank drops below this (was 20)
 
 # ─────────────────────────────────────────────
@@ -72,6 +72,7 @@ DATA_FETCH_START = "2018-01-01"   # extra buffer for DMA calculations
 DATA_FETCH_END   = "2025-01-01"
 DATA_CACHE_FILE  = "price_data_cache.csv"
 VOLUME_CACHE     = "volume_data_cache.csv"
+OPEN_CACHE       = "open_data_cache.csv"
 REGIME_CACHE     = "regime_data_cache.csv"
 BENCHMARK_TICKER = "^NSEI"        # Nifty 50
 REGIME_TICKER    = "^CRSLDX"      # Nifty 500

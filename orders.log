@@ -546,3 +546,145 @@
 2026-05-26 04:36:55 | INFO | Telegram notification sent
 2026-05-26 04:36:55 | INFO | Final portfolio: ['NATIONALUM', 'GVT&D', 'APARINDS', 'MCX', 'BHARATFORG', 'ADANIPOWER']
 2026-05-26 04:36:55 | INFO | =======================================================
+2026-05-26 18:51:05 | INFO | =======================================================
+2026-05-26 18:51:05 | INFO | EXECUTION RUN — 2026-05-26 18:51:05
+2026-05-26 18:51:05 | INFO | MODE          : PAPER
+2026-05-26 18:51:05 | INFO | =======================================================
+2026-05-26 18:51:05 | INFO | Current holdings: None (empty)
+2026-05-26 18:51:05 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-26 18:51:05 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-26 18:51:05 | INFO | Running signal engine...
+2026-05-26 18:51:06 | INFO | Regime: RISK-ON
+2026-05-26 18:51:06 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-26 18:51:06 | INFO | Regime strength: 100% | Deploying 12 positions @ 8,333 each
+2026-05-26 18:51:06 | INFO | [PAPER] BUY  | NATIONALUM      |    20 shares @ ₹   418.3 | Total: ₹     8,366
+2026-05-26 18:51:06 | INFO | Skipping POWERINDIA @ ₹35,995 — too expensive for ₹8,333 allocation
+2026-05-26 18:51:06 | INFO | [PAPER] BUY  | GVT&D           |     1 shares @ ₹  4872.5 | Total: ₹     4,872
+2026-05-26 18:51:06 | INFO | [PAPER] BUY  | MCX             |     2 shares @ ₹  3323.8 | Total: ₹     6,648
+2026-05-26 18:51:06 | INFO | Skipping APARINDS @ ₹12,536 — too expensive for ₹8,333 allocation
+2026-05-26 18:51:06 | INFO | [PAPER] BUY  | ADANIPOWER      |    34 shares @ ₹   245.8 | Total: ₹     8,357
+2026-05-26 18:51:06 | INFO | [PAPER] BUY  | BHARATFORG      |     4 shares @ ₹  1940.1 | Total: ₹     7,760
+2026-05-26 18:51:06 | INFO | [PAPER] BUY  | ADANIENSOL      |     5 shares @ ₹  1470.6 | Total: ₹     7,353
+2026-05-26 18:51:06 | INFO | [PAPER] BUY  | BSE             |     1 shares @ ₹  4425.3 | Total: ₹     4,425
+2026-05-26 18:51:06 | INFO | [PAPER] BUY  | HINDALCO        |     7 shares @ ₹  1109.3 | Total: ₹     7,765
+2026-05-26 18:51:06 | INFO | [PAPER] BUY  | GLENMARK        |     3 shares @ ₹  2363.2 | Total: ₹     7,090
+2026-05-26 18:51:06 | INFO | [PAPER] BUY  | SAIL            |    40 shares @ ₹   204.9 | Total: ₹     8,196
+2026-05-26 18:51:06 | INFO | Holdings saved: {'NATIONALUM': 20, 'GVT&D': 1, 'MCX': 2, 'ADANIPOWER': 34, 'BHARATFORG': 4, 'ADANIENSOL': 5, 'BSE': 1, 'HINDALCO': 7, 'GLENMARK': 3, 'SAIL': 40}
+2026-05-26 18:51:07 | INFO | Telegram notification sent
+2026-05-26 18:51:07 | INFO | Final portfolio: ['NATIONALUM', 'GVT&D', 'MCX', 'ADANIPOWER', 'BHARATFORG', 'ADANIENSOL', 'BSE', 'HINDALCO', 'GLENMARK', 'SAIL']
+2026-05-26 18:51:07 | INFO | =======================================================
+2026-05-26 18:53:55 | INFO | =======================================================
+2026-05-26 18:53:55 | INFO | EXECUTION RUN — 2026-05-26 18:53:55
+2026-05-26 18:53:55 | INFO | MODE          : PAPER
+2026-05-26 18:53:55 | INFO | =======================================================
+2026-05-26 18:53:55 | INFO | Current holdings: None (empty)
+2026-05-26 18:53:55 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-26 18:53:55 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-26 18:53:55 | INFO | Running signal engine...
+2026-05-26 18:53:56 | INFO | Regime: RISK-ON
+2026-05-26 18:53:57 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-26 18:53:57 | INFO | Regime strength: 100% | Deploying 12 positions @ 8,333 each
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | NATIONALUM      |    20 shares @ ₹   418.3 | Total: ₹     8,366
+2026-05-26 18:53:57 | INFO | Skipping POWERINDIA @ ₹35,995 — too expensive for ₹8,333 allocation
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | GVT&D           |     1 shares @ ₹  4872.5 | Total: ₹     4,872
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | MCX             |     2 shares @ ₹  3323.8 | Total: ₹     6,648
+2026-05-26 18:53:57 | INFO | Skipping APARINDS @ ₹12,536 — too expensive for ₹8,333 allocation
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | ADANIPOWER      |    34 shares @ ₹   245.8 | Total: ₹     8,357
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | BHARATFORG      |     4 shares @ ₹  1940.1 | Total: ₹     7,760
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | ADANIENSOL      |     5 shares @ ₹  1470.6 | Total: ₹     7,353
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | BSE             |     1 shares @ ₹  4425.3 | Total: ₹     4,425
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | HINDALCO        |     7 shares @ ₹  1109.3 | Total: ₹     7,765
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | GLENMARK        |     3 shares @ ₹  2363.2 | Total: ₹     7,090
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | SAIL            |    40 shares @ ₹   204.9 | Total: ₹     8,196
+2026-05-26 18:53:57 | INFO | Redistributing ₹29,523 unused cash across 10 positions
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | NATIONALUM      |     4 shares @ ₹   418.3 | Total: ₹     1,673
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | GVT&D           |     1 shares @ ₹  4872.5 | Total: ₹     4,872
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | MCX             |     1 shares @ ₹  3323.8 | Total: ₹     3,324
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | ADANIPOWER      |     6 shares @ ₹   245.8 | Total: ₹     1,475
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | BHARATFORG      |     1 shares @ ₹  1940.1 | Total: ₹     1,940
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | ADANIENSOL      |     1 shares @ ₹  1470.6 | Total: ₹     1,471
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | BSE             |     1 shares @ ₹  4425.3 | Total: ₹     4,425
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | HINDALCO        |     2 shares @ ₹  1109.3 | Total: ₹     2,219
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | GLENMARK        |     1 shares @ ₹  2363.2 | Total: ₹     2,363
+2026-05-26 18:53:57 | INFO | [PAPER] BUY  | SAIL            |     9 shares @ ₹   204.9 | Total: ₹     1,844
+2026-05-26 18:53:57 | INFO | Holdings saved: {'NATIONALUM': 24, 'GVT&D': 2, 'MCX': 3, 'ADANIPOWER': 40, 'BHARATFORG': 5, 'ADANIENSOL': 6, 'BSE': 2, 'HINDALCO': 9, 'GLENMARK': 4, 'SAIL': 49}
+2026-05-26 18:53:58 | INFO | Telegram notification sent
+2026-05-26 18:53:58 | INFO | Final portfolio: ['NATIONALUM', 'GVT&D', 'MCX', 'ADANIPOWER', 'BHARATFORG', 'ADANIENSOL', 'BSE', 'HINDALCO', 'GLENMARK', 'SAIL']
+2026-05-26 18:53:58 | INFO | =======================================================
+2026-05-26 19:02:40 | INFO | =======================================================
+2026-05-26 19:02:40 | INFO | EXECUTION RUN — 2026-05-26 19:02:40
+2026-05-26 19:02:40 | INFO | MODE          : PAPER
+2026-05-26 19:02:40 | INFO | =======================================================
+2026-05-26 19:02:40 | INFO | Current holdings: ['NATIONALUM', 'GVT&D', 'MCX', 'ADANIPOWER', 'BHARATFORG', 'ADANIENSOL', 'BSE', 'HINDALCO', 'GLENMARK', 'SAIL']
+2026-05-26 19:02:40 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-26 19:02:40 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-26 19:02:40 | INFO | Running signal engine...
+2026-05-26 19:02:41 | INFO | Regime: RISK-ON
+2026-05-26 19:02:42 | INFO | Holdings saved: {'NATIONALUM': 24, 'GVT&D': 2, 'MCX': 3, 'ADANIPOWER': 40, 'BHARATFORG': 5, 'ADANIENSOL': 6, 'BSE': 2, 'HINDALCO': 9, 'GLENMARK': 4, 'SAIL': 49}
+2026-05-26 19:02:42 | INFO | Telegram notification sent
+2026-05-26 19:02:42 | INFO | Final portfolio: ['NATIONALUM', 'GVT&D', 'MCX', 'ADANIPOWER', 'BHARATFORG', 'ADANIENSOL', 'BSE', 'HINDALCO', 'GLENMARK', 'SAIL']
+2026-05-26 19:02:42 | INFO | =======================================================
+2026-05-26 19:04:51 | INFO | =======================================================
+2026-05-26 19:04:51 | INFO | EXECUTION RUN — 2026-05-26 19:04:51
+2026-05-26 19:04:51 | INFO | MODE          : PAPER
+2026-05-26 19:04:51 | INFO | =======================================================
+2026-05-26 19:04:51 | INFO | Current holdings: ['NATIONALUM', 'GVT&D', 'MCX', 'ADANIPOWER', 'BHARATFORG', 'ADANIENSOL', 'BSE', 'HINDALCO', 'GLENMARK', 'SAIL']
+2026-05-26 19:04:51 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-26 19:04:51 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-26 19:04:51 | INFO | Running signal engine...
+2026-05-26 19:04:52 | INFO | Regime: RISK-ON
+2026-05-26 19:04:53 | INFO | Holdings saved: {'NATIONALUM': 24, 'GVT&D': 2, 'MCX': 3, 'ADANIPOWER': 40, 'BHARATFORG': 5, 'ADANIENSOL': 6, 'BSE': 2, 'HINDALCO': 9, 'GLENMARK': 4, 'SAIL': 49}
+2026-05-26 19:04:53 | INFO | Telegram notification sent
+2026-05-26 19:04:53 | INFO | Final portfolio: ['NATIONALUM', 'GVT&D', 'MCX', 'ADANIPOWER', 'BHARATFORG', 'ADANIENSOL', 'BSE', 'HINDALCO', 'GLENMARK', 'SAIL']
+2026-05-26 19:04:53 | INFO | =======================================================
+2026-05-26 19:06:06 | INFO | =======================================================
+2026-05-26 19:06:06 | INFO | EXECUTION RUN — 2026-05-26 19:06:06
+2026-05-26 19:06:06 | INFO | MODE          : PAPER
+2026-05-26 19:06:06 | INFO | =======================================================
+2026-05-26 19:06:06 | INFO | Current holdings: ['NATIONALUM', 'GVT&D', 'MCX', 'ADANIPOWER', 'BHARATFORG', 'ADANIENSOL', 'BSE', 'HINDALCO', 'GLENMARK', 'SAIL']
+2026-05-26 19:06:06 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-26 19:06:06 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-26 19:06:06 | INFO | Running signal engine...
+2026-05-26 19:06:07 | INFO | Regime: RISK-ON
+2026-05-26 19:06:08 | INFO | Holdings saved: {'NATIONALUM': 24, 'GVT&D': 2, 'MCX': 3, 'ADANIPOWER': 40, 'BHARATFORG': 5, 'ADANIENSOL': 6, 'BSE': 2, 'HINDALCO': 9, 'GLENMARK': 4, 'SAIL': 49}
+2026-05-26 19:06:08 | INFO | Telegram notification sent
+2026-05-26 19:06:08 | INFO | Final portfolio: ['NATIONALUM', 'GVT&D', 'MCX', 'ADANIPOWER', 'BHARATFORG', 'ADANIENSOL', 'BSE', 'HINDALCO', 'GLENMARK', 'SAIL']
+2026-05-26 19:06:08 | INFO | =======================================================
+2026-05-26 20:50:29 | INFO | =======================================================
+2026-05-26 20:50:30 | INFO | EXECUTION RUN — 2026-05-26 20:50:30
+2026-05-26 20:50:30 | INFO | MODE          : PAPER
+2026-05-26 20:50:30 | INFO | =======================================================
+2026-05-26 20:50:30 | INFO | Current holdings: None (empty)
+2026-05-26 20:50:30 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-26 20:50:30 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-26 20:50:30 | INFO | Running signal engine...
+2026-05-26 20:50:31 | INFO | Regime: RISK-ON
+2026-05-26 20:50:31 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-26 20:50:31 | INFO | Regime strength: 100% | Deploying 12 positions @ 8,333 each
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | NATIONALUM      |    20 shares @ ₹   423.2 | Total: ₹     8,464
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | GVT&D           |     1 shares @ ₹  5013.4 | Total: ₹     5,013
+2026-05-26 20:50:31 | INFO | Skipping POWERINDIA @ ₹35,635 — too expensive for ₹8,333 allocation
+2026-05-26 20:50:31 | INFO | Skipping APARINDS @ ₹12,480 — too expensive for ₹8,333 allocation
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | MCX             |     2 shares @ ₹  3479.6 | Total: ₹     6,959
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | BHARATFORG      |     4 shares @ ₹  1975.8 | Total: ₹     7,903
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | ADANIPOWER      |    35 shares @ ₹   240.4 | Total: ₹     8,414
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | ADANIENSOL      |     5 shares @ ₹  1507.2 | Total: ₹     7,536
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | BSE             |     1 shares @ ₹  4419.9 | Total: ₹     4,420
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | HINDALCO        |     7 shares @ ₹  1132.6 | Total: ₹     7,928
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | SAIL            |    42 shares @ ₹   204.3 | Total: ₹     8,581
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | GLENMARK        |     3 shares @ ₹  2407.1 | Total: ₹     7,221
+2026-05-26 20:50:31 | INFO | Redistributing ₹30,051 unused cash across 10 positions
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | NATIONALUM      |     4 shares @ ₹   411.1 | Total: ₹     1,644
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | GVT&D           |     1 shares @ ₹  4870.2 | Total: ₹     4,870
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | MCX             |     1 shares @ ₹  3380.2 | Total: ₹     3,380
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | BHARATFORG      |     1 shares @ ₹  1956.7 | Total: ₹     1,957
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | ADANIPOWER      |     7 shares @ ₹   238.0 | Total: ₹     1,666
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | ADANIENSOL      |     1 shares @ ₹  1492.6 | Total: ₹     1,493
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | BSE             |     1 shares @ ₹  4377.0 | Total: ₹     4,377
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | HINDALCO        |     2 shares @ ₹  1121.6 | Total: ₹     2,243
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | SAIL            |     8 shares @ ₹   202.3 | Total: ₹     1,618
+2026-05-26 20:50:31 | INFO | [PAPER] BUY  | GLENMARK        |     1 shares @ ₹  2383.7 | Total: ₹     2,384
+2026-05-26 20:50:31 | INFO | Holdings saved: {'NATIONALUM': 24, 'GVT&D': 2, 'MCX': 3, 'BHARATFORG': 5, 'ADANIPOWER': 42, 'ADANIENSOL': 6, 'BSE': 2, 'HINDALCO': 9, 'SAIL': 50, 'GLENMARK': 4}
+2026-05-26 20:50:32 | INFO | Telegram notification sent
+2026-05-26 20:50:32 | INFO | Final portfolio: ['NATIONALUM', 'GVT&D', 'MCX', 'BHARATFORG', 'ADANIPOWER', 'ADANIENSOL', 'BSE', 'HINDALCO', 'SAIL', 'GLENMARK']
+2026-05-26 20:50:32 | INFO | =======================================================

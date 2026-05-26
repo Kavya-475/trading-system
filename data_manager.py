@@ -334,37 +334,41 @@ def fetch_fresh(tickers: list, start: str, end: str) -> tuple:
     # ── Extract close and volume safely ─────────────────────────────────
     close_data  = {}
     volume_data = {}
+    open_data   = {}
 
     for t in tickers:
         yf_t = t + ".NS"
         try:
-            # yfinance 2.x with group_by="ticker" uses (ticker, field) MultiIndex
             if isinstance(raw.columns, pd.MultiIndex):
                 if yf_t in raw.columns.get_level_values(0):
                     c = raw[yf_t]["Close"]
                     v = raw[yf_t]["Volume"]
+                    o = raw[yf_t]["Open"]
                 elif yf_t in raw.columns.get_level_values(1):
                     c = raw["Close"][yf_t]
                     v = raw["Volume"][yf_t]
+                    o = raw["Open"][yf_t]
                 else:
                     continue
             else:
-                # Single ticker fallback
                 c = raw["Close"]
                 v = raw["Volume"]
+                o = raw["Open"]
 
             if c is not None and len(c.dropna()) > 0:
                 close_data[t]  = c
                 volume_data[t] = v
+                open_data[t]   = o
 
         except Exception:
             continue
 
     close_df  = pd.DataFrame(close_data)
     volume_df = pd.DataFrame(volume_data)
+    open_df   = pd.DataFrame(open_data)
 
     print(f"  Got data for {len(close_df.columns)}/{len(tickers)} stocks")
-    return close_df, volume_df
+    return close_df, volume_df, open_df
 
 
 # ─────────────────────────────────────────────
@@ -389,11 +393,12 @@ def update_cache():
     if not os.path.exists(cfg.DATA_CACHE_FILE):
         print("No cache found. Running full download (this takes ~4 minutes)...")
         fetch_start = cfg.DATA_FETCH_START
-        close, volume = fetch_fresh(UNIVERSE_TICKERS, fetch_start, fetch_end)
+        close, volume, open_prices = fetch_fresh(UNIVERSE_TICKERS, fetch_start, fetch_end)
 
         if not close.empty:
             close.to_csv(cfg.DATA_CACHE_FILE)
             volume.to_csv(cfg.VOLUME_CACHE)
+            open_prices.to_csv(cfg.OPEN_CACHE)
             print(f"Cache created: {close.shape[0]} days × {close.shape[1]} stocks")
 
         _update_index_cache(fetch_start, fetch_end)
@@ -415,7 +420,7 @@ def update_cache():
     fetch_start = (last_date + timedelta(days=1)).strftime("%Y-%m-%d")
     print(f"Fetching new data from {fetch_start}...")
 
-    new_close, new_volume = fetch_fresh(UNIVERSE_TICKERS, fetch_start, fetch_end)
+    new_close, new_volume, new_open = fetch_fresh(UNIVERSE_TICKERS, fetch_start, fetch_end)
 
     if new_close.empty:
         print("No new data returned. Market may have been closed.")
@@ -530,6 +535,7 @@ def print_cache_status():
     for label, filepath in [
         ("Price cache",  cfg.DATA_CACHE_FILE),
         ("Volume cache", cfg.VOLUME_CACHE),
+        ("Open cache",   cfg.OPEN_CACHE),
         ("Index cache",  cfg.REGIME_CACHE),
     ]:
         if os.path.exists(filepath):

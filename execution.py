@@ -190,6 +190,23 @@ def save_holdings(holdings: dict):
     with open(HOLDINGS_FILE, "w") as f:
         json.dump(holdings, f, indent=2)
     log.info(f"Holdings saved: { {t: get_shares(holdings,t) for t in holdings if get_shares(holdings,t) > 0} }")
+    # Daily backup — keeps last 7 days
+    try:
+        import shutil
+        from datetime import date as _date
+        _backup_dir = "backups"
+        os.makedirs(_backup_dir, exist_ok=True)
+        _backup_file = os.path.join(_backup_dir, f"holdings_{_date.today()}.json")
+        shutil.copy(HOLDINGS_FILE, _backup_file)
+        # Remove backups older than 7 days
+        import time
+        _cutoff = time.time() - (7 * 86400)
+        for _f in os.listdir(_backup_dir):
+            _fp = os.path.join(_backup_dir, _f)
+            if os.path.getmtime(_fp) < _cutoff:
+                os.remove(_fp)
+    except Exception as _e:
+        log.warning(f"Backup failed: {_e}")
 
 
 
@@ -359,18 +376,30 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
 
     bought_count = 0
     for ticker in tickers_to_buy:
+        if bought_count >= stocks_to_hold:
+            break
+
         price = prices.get(ticker, 0)
         if price <= 0:
             log.warning(f"No price for {ticker} — skipping")
             continue
 
-        current_shares = holdings.get(ticker, 0)
+        # Skip if even 1 share costs more than target allocation
+        # Take next ranked stock instead
+        if price > target:
+            log.info(f"Skipping {ticker} @ ₹{price:,.0f} — too expensive for ₹{target:,.0f} allocation")
+            continue
+
+        current_shares = get_shares(holdings, ticker)
         current_value  = current_shares * price
 
         if current_value < target * 0.95:
             buy_value     = target - current_value
             shares_to_buy = int(buy_value / price)
-            limit_price   = round(price * (1 + LIMIT_BUFFER), 1)
+            # Tiered buffer based on rank — higher rank = higher buffer to ensure fill
+            _rank       = list(tickers_to_buy).index(ticker) if ticker in tickers_to_buy else 99
+            _buf        = 0.050 if _rank < 5 else (0.030 if _rank < 12 else 0.020)
+            limit_price = round(price * (1 + _buf), 1)
 
             if shares_to_buy > 0:
                 res = place_buy_order(kite, ticker, shares_to_buy, limit_price)
@@ -382,8 +411,37 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
                     new_avg = (old_avg * existing_shares + price * shares_to_buy) / new_shares if existing_shares > 0 and old_avg > 0 else price
                     set_holding(holdings, ticker, new_shares, new_avg)
                     bought_count += 1
-                    if bought_count >= stocks_to_hold:
-                        break
+            else:
+                log.info(f"Skipping {ticker} @ ₹{price:,.0f} — insufficient allocation for 1 share")
+
+    # ── Second pass: redistribute unused cash ─────────────────────────────
+    # After initial buys, recalculate target using remaining cash
+    # and top up underweight positions
+    if bought_count > 0:
+        held = [t for t in holdings if get_shares(holdings, t) > 0]
+        current_val = sum(get_shares(holdings, t) * prices.get(t, 0) for t in held)
+        remaining_cash = capital_deployed - current_val
+        if remaining_cash > 500 and held:
+            new_target = (current_val + remaining_cash) / len(held)
+            log.info(f"Redistributing ₹{remaining_cash:,.0f} unused cash across {len(held)} positions")
+            for ticker in held:
+                price = prices.get(ticker, 0)
+                if price <= 0 or price > new_target:
+                    continue
+                current_value = get_shares(holdings, ticker) * price
+                if current_value < new_target * 0.95:
+                    buy_value     = new_target - current_value
+                    shares_to_buy = int(buy_value / price)
+                    limit_price   = round(price * (1 + 0.020), 1)  # 2% buffer for top-ups
+                    if shares_to_buy > 0:
+                        res = place_buy_order(kite, ticker, shares_to_buy, limit_price)
+                        buy_lines.append(f"BUY {ticker} ×{shares_to_buy} @ ₹{limit_price} [top-up]")
+                        if res["status"] in ("paper", "placed"):
+                            existing_shares = get_shares(holdings, ticker)
+                            new_shares = existing_shares + shares_to_buy
+                            old_avg = get_avg_price(holdings, ticker)
+                            new_avg = (old_avg * existing_shares + price * shares_to_buy) / new_shares if existing_shares > 0 and old_avg > 0 else price
+                            set_holding(holdings, ticker, new_shares, new_avg)
 
     return buy_lines
 

@@ -320,6 +320,7 @@ def txn_cost(value, side):
     cost += value * cfg.STAMP_DUTY  if side == "buy"  else 0
     cost += value * cfg.STT_SELL    if side == "buy"  else 0   # STT on both sides for CNC
     cost += value * cfg.STT_SELL    if side == "sell" else 0
+    cost += 15.93                   if side == "sell" else 0   # DP charge flat per sell
     return cost
 
 
@@ -333,7 +334,8 @@ def load_data():
         print(f"Loaded {close.shape[1]} stocks, {close.shape[0]} days.")
         nifty100  = regime_df["nifty100"]    if "nifty100"    in regime_df.columns else regime_df["nifty500"]
         nifty_mid = regime_df["nifty_midcap"]if "nifty_midcap"in regime_df.columns else regime_df["nifty500"]
-        return close, volume, regime_df["nifty500"], regime_df["nifty50"], nifty100, nifty_mid
+        open_prices = pd.read_csv(cfg.OPEN_CACHE, index_col=0, parse_dates=True) if os.path.exists(cfg.OPEN_CACHE) else close.copy()
+        return close, volume, regime_df["nifty500"], regime_df["nifty50"], nifty100, nifty_mid, open_prices
 
     print(f"Downloading {len(UNIVERSE)} stocks...")
     tickers = [t+".NS" for t in UNIVERSE]
@@ -487,14 +489,54 @@ def find_replacement(scored, current_holdings, exits):
 
 
 def get_price(close, ticker, date):
-    """Safe price lookup."""
+    """Safe price lookup — returns last close on or before date."""
     try:
         return float(close[ticker].loc[:date].dropna().iloc[-1])
     except Exception:
         return 0.0
 
+def get_open_price(open_prices, ticker, date):
+    """Returns opening price ON the given date (not before)."""
+    try:
+        if ticker not in open_prices.columns:
+            return 0.0
+        if date in open_prices.index:
+            val = open_prices[ticker].loc[date]
+            return float(val) if pd.notna(val) else 0.0
+        return 0.0
+    except Exception:
+        return 0.0
 
-# ── Performance metrics ────────────────────────────────────────────────────
+def get_fill_price(close_price, open_price, side, rank=0):
+    """
+    Simulates realistic order fill.
+    Buy orders placed at close + buffer, executed next day at open.
+    Sell orders placed at close - buffer, executed next day at open.
+    Returns fill price if order fills, None if it misses.
+    """
+    if side == "buy":
+        if rank < 5:
+            buffer = 0.050
+        elif rank < 12:
+            buffer = 0.030
+        else:
+            buffer = 0.020
+        limit = close_price * (1 + buffer)
+        if open_price > 0 and open_price <= limit:
+            return open_price
+        elif open_price == 0:
+            return close_price
+        else:
+            return None
+    else:
+        buffer = 0.010
+        limit  = close_price * (1 - buffer)
+        if open_price > 0 and open_price >= limit:
+            return open_price
+        elif open_price == 0:
+            return close_price
+        else:
+            return None
 def print_metrics(equity, label):
     # Resample to monthly for consistent metric calculation
     monthly = equity.resample("MS").last().dropna()
@@ -528,7 +570,7 @@ def print_metrics(equity, label):
 
 # ── Main backtest ──────────────────────────────────────────────────────────
 def run_backtest():
-    close, volume, nifty500, nifty50, nifty100, nifty_mid = load_data()
+    close, volume, nifty500, nifty50, nifty100, nifty_mid, open_prices = load_data()
 
     # All trading days in backtest window
     all_days = close.loc[cfg.START_DATE:cfg.END_DATE].index
@@ -552,8 +594,11 @@ def run_backtest():
     print(f"  Exit monitoring: DAILY  |  Full rebalance: MONTHLY")
     print(f"{'='*55}\n")
 
-    for day in all_days:
+    all_days_list = list(all_days)
+    for day_idx, day in enumerate(all_days_list):
         date_str    = pd.Timestamp(day).strftime("%Y-%m-%d")
+        # Next trading day — used for realistic fill simulation
+        next_day    = all_days_list[day_idx + 1] if day_idx + 1 < len(all_days_list) else day
         cur_month    = pd.Timestamp(day).to_period("M")
         # First trading day of each month = month changed since last rebalance
         is_rebalance = (cur_month != last_rebalance_month)
@@ -578,12 +623,15 @@ def run_backtest():
                     if sh > 0 and t in close.columns:
                         px = get_price(close, t, day)
                         if px > 0:
-                            proceeds = sh * px
+                            open_px  = get_open_price(open_prices, t, next_day)
+                            fill_px  = get_fill_price(px, open_px, "sell")
+                            fill_px  = fill_px if fill_px else open_px if open_px > 0 else px
+                            proceeds = sh * fill_px
                             cost     = txn_cost(proceeds, "sell")
                             cash    += proceeds - cost
                             trade_log.append({
                                 "date":date_str,"ticker":t,"action":"SELL(RISK-OFF)",
-                                "shares":sh,"price":px,"value":proceeds,"cost":cost
+                                "shares":sh,"price":fill_px,"value":proceeds,"cost":cost
                             })
                 holdings     = {}
                 in_risk_off  = True
@@ -635,12 +683,15 @@ def run_backtest():
             if sh > 0:
                 px = get_price(close, t, day)
                 if px > 0:
-                    proceeds = sh * px
+                    open_px  = get_open_price(open_prices, t, next_day)
+                    fill_px  = get_fill_price(px, open_px, "sell")
+                    fill_px  = fill_px if fill_px else open_px if open_px > 0 else px
+                    proceeds = sh * fill_px
                     cost     = txn_cost(proceeds, "sell")
                     cash    += proceeds - cost
                     trade_log.append({
                         "date":date_str,"ticker":t,"action":f"SELL({reason})",
-                        "shares":sh,"price":px,"value":proceeds,"cost":cost
+                        "shares":sh,"price":fill_px,"value":proceeds,"cost":cost
                     })
                     holdings[t] = 0
 
@@ -662,10 +713,15 @@ def run_backtest():
                 px = get_price(close, t, day)
                 if px <= 0:
                     continue
-                cur_val = holdings.get(t, 0) * px
+                rank     = cached_scored.index.get_loc(t) if t in cached_scored.index else 99
+                open_px  = get_open_price(open_prices, t, next_day)
+                fill_px  = get_fill_price(px, open_px, "buy", rank)
+                if fill_px is None:
+                    continue  # missed — gap-up too large
+                cur_val = holdings.get(t, 0) * fill_px
                 if cur_val < target * 0.95:
-                    n    = int((target - cur_val) / px)
-                    cost = n * px
+                    n    = int((target - cur_val) / fill_px)
+                    cost = n * fill_px
                     tc   = txn_cost(cost, "buy")
                     if n > 0 and cash >= cost + tc:
                         cash -= (cost + tc)
@@ -673,7 +729,7 @@ def run_backtest():
                         bought += 1
                         trade_log.append({
                             "date":date_str,"ticker":t,"action":"BUY(replacement)",
-                            "shares":n,"price":px,"value":cost,"cost":tc
+                            "shares":n,"price":fill_px,"value":cost,"cost":tc
                         })
 
         # ── MONTHLY FULL ROTATION ────────────────────────────────────────────
@@ -706,16 +762,26 @@ def run_backtest():
             stocks_to_hold = max(1, round(cfg.TOP_N * strength))
             target         = (port_val * strength) / stocks_to_hold
 
-            # Buy top 7 (new positions + top-ups)
+            # Buy top N (new positions + top-ups) with realistic fills
             bought = 0
             for t in cached_top_7:
+                if bought >= stocks_to_hold:
+                    break
                 px = get_price(close, t, day)
                 if px <= 0:
                     continue
-                cur_val = holdings.get(t, 0) * px
+                # Skip if price > target allocation (expensive stock)
+                if px > target:
+                    continue
+                rank    = cached_scored.index.get_loc(t) if t in cached_scored.index else 99
+                open_px = get_open_price(open_prices, t, next_day)
+                fill_px = get_fill_price(px, open_px, "buy", rank)
+                if fill_px is None:
+                    continue  # missed — gap-up too large
+                cur_val = holdings.get(t, 0) * fill_px
                 if cur_val < target * 0.95:
-                    n    = int((target - cur_val) / px)
-                    cost = n * px
+                    n    = int((target - cur_val) / fill_px)
+                    cost = n * fill_px
                     tc   = txn_cost(cost, "buy")
                     if n > 0 and cash >= cost + tc:
                         cash -= (cost + tc)
@@ -723,10 +789,8 @@ def run_backtest():
                         bought += 1
                         trade_log.append({
                             "date":date_str,"ticker":t,"action":"BUY",
-                            "shares":n,"price":px,"value":cost,"cost":tc
+                            "shares":n,"price":fill_px,"value":cost,"cost":tc
                         })
-                    if bought >= stocks_to_hold:
-                        break
 
             # Print monthly summary
             held = [t for t, s in holdings.items() if s > 0]
