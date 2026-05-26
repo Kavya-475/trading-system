@@ -358,10 +358,20 @@ def load_data():
 
 # ── Signal helpers ─────────────────────────────────────────────────────────
 def get_regime(nifty500, date):
-    d = nifty500.loc[:date].dropna()
+    d   = nifty500.loc[:date].dropna()
     if len(d) < cfg.REGIME_DMA:
         return "RISK-ON"
-    return "RISK-ON" if d.iloc[-1] > d.rolling(cfg.REGIME_DMA).mean().iloc[-1] else "RISK-OFF"
+    dma = d.rolling(cfg.REGIME_DMA).mean()
+
+    # Confirmation filter
+    confirm_days = getattr(cfg, "REGIME_CONFIRM_DAYS", 0)
+    if confirm_days > 0 and len(d) >= confirm_days:
+        recent     = d.iloc[-confirm_days:]
+        recent_dma = dma.iloc[-confirm_days:]
+        all_above  = all(p > m for p, m in zip(recent, recent_dma))
+        return "RISK-ON" if all_above else "RISK-OFF"
+
+    return "RISK-ON" if d.iloc[-1] > dma.iloc[-1] else "RISK-OFF"
 
 
 

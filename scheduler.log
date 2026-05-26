@@ -74,3 +74,78 @@ Computing scores for 237 stocks...
 Loaded cache: 250 stocks | last date: 2026-05-25
 
 LIQUIDITY FILTER: 237/250 passed
+2026-05-26 10:10:01,499 | SCHEDULER START — 2026-05-26 10:10:01.499332
+2026-05-26 10:10:29,422 | Kite login successful
+2026-05-26 10:10:53,296 | Cache updated
+2026-05-26 10:10:53,348 | =======================================================
+=======================================================
+2026-05-26 10:10:53,348 | EXECUTION RUN — 2026-05-26 10:10:53
+EXECUTION RUN — 2026-05-26 10:10:53
+2026-05-26 10:10:53,348 | MODE          : PAPER
+MODE          : PAPER
+2026-05-26 10:10:53,348 | =======================================================
+=======================================================
+2026-05-26 10:10:53,356 | Current holdings: ['NATIONALUM', 'GVT&D', 'APARINDS', 'MCX', 'BHARATFORG', 'ADANIPOWER']
+Current holdings: ['NATIONALUM', 'GVT&D', 'APARINDS', 'MCX', 'BHARATFORG', 'ADANIPOWER']
+2026-05-26 10:10:53,531 | Loaded latest prices for 250 stocks from cache
+Loaded latest prices for 250 stocks from cache
+2026-05-26 10:10:53,533 | PAPER MODE — Kite Connect not initialised
+PAPER MODE — Kite Connect not initialised
+2026-05-26 10:10:53,534 | Running signal engine...
+Running signal engine...
+2026-05-26 10:10:54,212 | Regime: RISK-ON
+Regime: RISK-ON
+2026-05-26 10:10:54,822 | Holdings saved: {'NATIONALUM': 35, 'GVT&D': 2, 'APARINDS': 1, 'MCX': 4, 'BHARATFORG': 7, 'ADANIPOWER': 61}
+Holdings saved: {'NATIONALUM': 35, 'GVT&D': 2, 'APARINDS': 1, 'MCX': 4, 'BHARATFORG': 7, 'ADANIPOWER': 61}
+2026-05-26 10:10:55,430 | Telegram notification sent
+Telegram notification sent
+2026-05-26 10:10:55,431 | Final portfolio: ['NATIONALUM', 'GVT&D', 'APARINDS', 'MCX', 'BHARATFORG', 'ADANIPOWER']
+Final portfolio: ['NATIONALUM', 'GVT&D', 'APARINDS', 'MCX', 'BHARATFORG', 'ADANIPOWER']
+2026-05-26 10:10:55,431 | =======================================================
+=======================================================
+2026-05-26 10:10:55,434 | Execution complete
+Execution complete
+2026-05-26 10:10:55,434 | SCHEDULER DONE
+SCHEDULER DONE
+Login URL: https://kite.zerodha.com/connect/login?api_key=59cld5cbjptfw384&v=3
+Navigating to Kite Connect login URL...
+NAV: https://kite.zerodha.com/connect/login?sess_id=IZp0qBn6OdtuqMQpzV3gt07nxZaP1gOZ&api_key=59cld5cbjptf
+NAV: https://kite.zerodha.com/connect/login?sess_id=IZp0qBn6OdtuqMQpzV3gt07nxZaP1gOZ&api_key=59cld5cbjptf
+Current URL: https://kite.zerodha.com/connect/login?sess_id=IZp0qBn6OdtuqMQpzV3gt07nxZaP1gOZ&api_key=59cld5cbjptfw384
+Submitted login form
+After login URL: https://kite.zerodha.com/connect/login?sess_id=IZp0qBn6OdtuqMQpzV3gt07nxZaP1gOZ&api_key=59cld5cbjptfw384
+TOTP code: 600447
+Got request_token: t3HLmvcMhD...
+NAV: chrome-error://chromewebdata/
+After TOTP URL: chrome-error://chromewebdata/
+Authorize button error: Page.wait_for_selector: Timeout 8000ms exceeded.
+Call log:
+  - waiting for locator("button:has-text(\"Authorise\"), button:has-text(\"Allow\"), button:has-text(\"Authorize\")") to be visible
+
+Page content (500 chars): <html><head></head><body></body></html>
+Login successful. Token: dN9v7XumMs...
+
+==================================================
+  DATA MANAGER — 2026-05-26
+==================================================
+Cache last updated : 2026-05-25
+Today              : 2026-05-26
+Fetching new data from 2026-05-26...
+  Downloading 250 stocks (2026-05-26 to 2026-05-27)...
+  Got data for 250/250 stocks
+Cache updated: added 1 new days
+Cache now has: 2074 days × 250 stocks
+Date range: 2018-01-01 → 2026-05-26
+
+Updating index data (Nifty 500 + Nifty 50)...
+Index update failed: If using all scalar values, you must pass an index
+Loaded cache: 250 stocks | last date: 2026-05-26
+
+RISK-OFF → Hold cash. Sell all holdings.
+
+LIQUIDITY FILTER: 236/250 passed
+
+Computing scores for 236 stocks...
+Loaded cache: 250 stocks | last date: 2026-05-26
+
+LIQUIDITY FILTER: 236/250 passed

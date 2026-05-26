@@ -310,14 +310,27 @@ UNIVERSE = {
 # REGIME FILTER
 # ─────────────────────────────────────────────
 def get_regime(nifty500: pd.Series) -> str:
-    clean  = nifty500.dropna()          # remove NaN gaps before rolling
+    clean  = nifty500.dropna()
     dma    = clean.rolling(cfg.REGIME_DMA).mean()
     latest = clean.iloc[-1]
     l_dma  = dma.iloc[-1]
-    regime = "RISK-ON" if latest > l_dma else "RISK-OFF"
+
+    # Confirmation filter — require N consecutive days above DMA for RISK-ON
+    # RISK-OFF is immediate (asymmetric — protect capital faster)
+    confirm_days = getattr(cfg, "REGIME_CONFIRM_DAYS", 0)
+    if confirm_days > 0 and len(clean) >= confirm_days:
+        recent        = clean.iloc[-confirm_days:]
+        recent_dma    = dma.iloc[-confirm_days:]
+        all_above     = all(p > d for p, d in zip(recent, recent_dma))
+        regime        = "RISK-ON" if all_above else "RISK-OFF"
+    else:
+        regime = "RISK-ON" if latest > l_dma else "RISK-OFF"
+
     print(f"\nREGIME CHECK")
     print(f"  Nifty 500 : {latest:,.2f}")
     print(f"  200 DMA   : {l_dma:,.2f}")
+    if confirm_days > 0:
+        print(f"  Confirm   : {confirm_days} days required for RISK-ON")
     print(f"  Status    : {regime}")
     return regime
 
@@ -480,12 +493,7 @@ def regime_strength(nifty500, nifty100, nifty_midcap) -> float:
     return fraction
 
 
-def get_regime(nifty500):
-    """Original binary regime check — used when REGIME_WEIGHTED = False."""
-    d = nifty500.dropna()
-    if len(d) < cfg.REGIME_DMA:
-        return "RISK-ON"
-    return "RISK-ON" if d.iloc[-1] > d.rolling(cfg.REGIME_DMA).mean().iloc[-1] else "RISK-OFF"
+
 
 def run_signals(current_holdings: list = []) -> dict:
     """

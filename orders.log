@@ -525,3 +525,24 @@
 2026-05-26 04:00:07 | INFO | Telegram notification sent
 2026-05-26 04:00:07 | INFO | Final portfolio: ['NATIONALUM', 'GVT&D', 'APARINDS', 'MCX']
 2026-05-26 04:00:07 | INFO | =======================================================
+2026-05-26 04:36:53 | INFO | =======================================================
+2026-05-26 04:36:53 | INFO | EXECUTION RUN — 2026-05-26 04:36:53
+2026-05-26 04:36:53 | INFO | MODE          : PAPER
+2026-05-26 04:36:53 | INFO | =======================================================
+2026-05-26 04:36:53 | INFO | Current holdings: None (empty)
+2026-05-26 04:36:53 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-26 04:36:53 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-26 04:36:53 | INFO | Running signal engine...
+2026-05-26 04:36:54 | INFO | Regime: RISK-ON
+2026-05-26 04:36:54 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-26 04:36:54 | INFO | Regime strength: 100% | Deploying 7 positions @ 14,286 each
+2026-05-26 04:36:54 | INFO | [PAPER] BUY  | NATIONALUM      |    35 shares @ ₹   404.8 | Total: ₹    14,168
+2026-05-26 04:36:54 | INFO | [PAPER] BUY  | GVT&D           |     2 shares @ ₹  4795.3 | Total: ₹     9,591
+2026-05-26 04:36:54 | INFO | [PAPER] BUY  | APARINDS        |     1 shares @ ₹ 12586.6 | Total: ₹    12,587
+2026-05-26 04:36:54 | INFO | [PAPER] BUY  | MCX             |     4 shares @ ₹  3352.7 | Total: ₹    13,411
+2026-05-26 04:36:54 | INFO | [PAPER] BUY  | BHARATFORG      |     7 shares @ ₹  1926.1 | Total: ₹    13,483
+2026-05-26 04:36:54 | INFO | [PAPER] BUY  | ADANIPOWER      |    61 shares @ ₹   233.4 | Total: ₹    14,237
+2026-05-26 04:36:54 | INFO | Holdings saved: {'NATIONALUM': 35, 'GVT&D': 2, 'APARINDS': 1, 'MCX': 4, 'BHARATFORG': 7, 'ADANIPOWER': 61}
+2026-05-26 04:36:55 | INFO | Telegram notification sent
+2026-05-26 04:36:55 | INFO | Final portfolio: ['NATIONALUM', 'GVT&D', 'APARINDS', 'MCX', 'BHARATFORG', 'ADANIPOWER']
+2026-05-26 04:36:55 | INFO | =======================================================

@@ -18,5 +18,15 @@
     "shares": 4,
     "avg_price": 3336.0,
     "entry_date": "2026-05-26"
+  },
+  "BHARATFORG": {
+    "shares": 7,
+    "avg_price": 1916.5,
+    "entry_date": "2026-05-26"
+  },
+  "ADANIPOWER": {
+    "shares": 61,
+    "avg_price": 232.25,
+    "entry_date": "2026-05-26"
   }
 }

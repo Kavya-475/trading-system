@@ -96,3 +96,10 @@ REGIME_WEIGHT_MIDCAP    = 0.25
 # Linear between the two
 REGIME_DEPLOY_MIN = -0.02   # -2% below DMA → cash
 REGIME_DEPLOY_MAX =  0.02   # +2% above DMA → fully invested
+
+# ─────────────────────────────────────────────
+# REGIME CONFIRMATION FILTER
+# ─────────────────────────────────────────────
+# Number of consecutive days above 200 DMA before triggering RISK-ON
+# RISK-OFF is still immediate (asymmetric — protect capital fast)
+REGIME_CONFIRM_DAYS = 0   # 0 = original behaviour (no confirmation needed)
