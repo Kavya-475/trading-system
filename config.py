@@ -60,8 +60,8 @@ STAMP_DUTY      = 0.00015
 # Change these two lines
 # config.py — change back to original
 # config.py
-START_DATE = "2020-01-01"
-END_DATE   = "2024-12-31"
+START_DATE = "2018-01-01"
+END_DATE   = "2026-05-22"
 INITIAL_CAPITAL = 100000      # ₹1 lakh (results scale %-wise regardless)
 RISK_FREE_RATE  = 0.065       # 6.5% — India 10yr G-Sec
 
@@ -79,3 +79,20 @@ REGIME_TICKER    = "^CRSLDX"      # Nifty 500
 # PAPER TESTING FLAGS
 # ─────────────────────────────────────────────
 FORCE_RISK_ON = True  # Set False before going live
+
+# ─────────────────────────────────────────────
+# WEIGHTED REGIME SETTINGS
+# ─────────────────────────────────────────────
+REGIME_WEIGHTED = False   # True = weighted strength, False = original binary
+
+# Index weights for regime strength (must sum to 1.0)
+REGIME_WEIGHT_NIFTY500  = 0.40
+REGIME_WEIGHT_NIFTY100  = 0.35
+REGIME_WEIGHT_MIDCAP    = 0.25
+
+# Deployment thresholds
+# Below DEPLOY_MIN → 0% invested (full cash)
+# Above DEPLOY_MAX → 100% invested (full 7 stocks)
+# Linear between the two
+REGIME_DEPLOY_MIN = -0.02   # -2% below DMA → cash
+REGIME_DEPLOY_MAX =  0.02   # +2% above DMA → fully invested

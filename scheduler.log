@@ -2,3 +2,75 @@
 2026-05-24 13:28:47,944 | Weekend — skipping
 2026-05-24 13:29:09,744 | SCHEDULER START — 2026-05-24 13:29:09.744000
 2026-05-24 13:29:09,744 | Weekend — skipping
+2026-05-25 10:10:01,880 | SCHEDULER START — 2026-05-25 10:10:01.880792
+2026-05-25 10:10:32,666 | Kite login successful
+2026-05-25 10:10:33,735 | Cache updated
+2026-05-25 10:10:33,741 | =======================================================
+=======================================================
+2026-05-25 10:10:33,742 | EXECUTION RUN — 2026-05-25 10:10:33
+EXECUTION RUN — 2026-05-25 10:10:33
+2026-05-25 10:10:33,742 | MODE          : PAPER
+MODE          : PAPER
+2026-05-25 10:10:33,742 | =======================================================
+=======================================================
+2026-05-25 10:10:33,771 | Current holdings: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+Current holdings: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+2026-05-25 10:10:33,993 | Loaded latest prices for 250 stocks from cache
+Loaded latest prices for 250 stocks from cache
+2026-05-25 10:10:33,994 | PAPER MODE — Kite Connect not initialised
+PAPER MODE — Kite Connect not initialised
+2026-05-25 10:10:33,994 | Running signal engine...
+Running signal engine...
+2026-05-25 10:10:34,754 | Regime: RISK-ON
+Regime: RISK-ON
+2026-05-25 10:10:35,456 | Holdings saved: {'MCX': 4, 'BHARATFORG': 7, 'CUMMINSIND': 2, 'BSE': 3, 'BHEL': 34, 'HINDALCO': 12, 'SAIL': 70}
+Holdings saved: {'MCX': 4, 'BHARATFORG': 7, 'CUMMINSIND': 2, 'BSE': 3, 'BHEL': 34, 'HINDALCO': 12, 'SAIL': 70}
+2026-05-25 10:10:36,056 | Telegram notification sent
+Telegram notification sent
+2026-05-25 10:10:36,057 | Final portfolio: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+Final portfolio: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+2026-05-25 10:10:36,057 | =======================================================
+=======================================================
+2026-05-25 10:10:36,060 | Execution complete
+Execution complete
+2026-05-25 10:10:36,060 | SCHEDULER DONE
+SCHEDULER DONE
+Login URL: https://kite.zerodha.com/connect/login?api_key=59cld5cbjptfw384&v=3
+Navigating to Kite Connect login URL...
+NAV: https://kite.zerodha.com/connect/login?api_key=59cld5cbjptfw384&sess_id=PDfBA7ykojaB7BzrMYBQ33nSy7J0
+NAV: https://kite.zerodha.com/connect/login?api_key=59cld5cbjptfw384&sess_id=PDfBA7ykojaB7BzrMYBQ33nSy7J0
+Current URL: https://kite.zerodha.com/connect/login?api_key=59cld5cbjptfw384&sess_id=PDfBA7ykojaB7BzrMYBQ33nSy7J0u1mw
+Submitted login form
+After login URL: https://kite.zerodha.com/connect/login?api_key=59cld5cbjptfw384&sess_id=PDfBA7ykojaB7BzrMYBQ33nSy7J0u1mw
+TOTP code: 316072
+Got request_token: GfS9bD5Y9k...
+NAV: chrome-error://chromewebdata/
+After TOTP URL: chrome-error://chromewebdata/
+Authorize button error: Page.wait_for_selector: Timeout 8000ms exceeded.
+Call log:
+  - waiting for locator("button:has-text(\"Authorise\"), button:has-text(\"Allow\"), button:has-text(\"Authorize\")") to be visible
+
+Page content (500 chars): <html><head></head><body></body></html>
+Login successful. Token: yk7pjYtpx6...
+
+==================================================
+  DATA MANAGER — 2026-05-25
+==================================================
+Cache last updated : 2026-05-25
+Today              : 2026-05-25
+Cache is up to date. No update needed.
+Loaded cache: 250 stocks | last date: 2026-05-25
+
+REGIME CHECK
+  Nifty 500 : 22,878.15
+  200 DMA   : 23,056.30
+  Status    : RISK-OFF
+
+RISK-OFF → Hold cash. Sell all holdings.
+
+LIQUIDITY FILTER: 237/250 passed
+
+Computing scores for 237 stocks...
+Loaded cache: 250 stocks | last date: 2026-05-25
+
+LIQUIDITY FILTER: 237/250 passed

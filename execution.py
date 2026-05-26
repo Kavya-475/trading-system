@@ -347,14 +347,17 @@ def send_telegram(message: str):
 # Shared logic used by both monitoring and rebalance paths
 # ─────────────────────────────────────────────
 def execute_buys(kite, tickers_to_buy: list, holdings: dict,
-                 prices: dict, port_value: float) -> list:
+                 prices: dict, port_value: float, strength: float = 1.0, stocks_to_hold: int = 7) -> list:
     """
     Places buy orders for given tickers.
     Returns list of buy order descriptions for Telegram.
     """
     buy_lines  = []
-    target     = port_value / cfg.TOP_N
+    capital_deployed = port_value * strength
+    target           = capital_deployed / stocks_to_hold
+    log.info(f"Regime strength: {strength*100:.0f}% | Deploying {stocks_to_hold} positions @ {target:,.0f} each")
 
+    bought_count = 0
     for ticker in tickers_to_buy:
         price = prices.get(ticker, 0)
         if price <= 0:
@@ -378,6 +381,9 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
                     old_avg = get_avg_price(holdings, ticker)
                     new_avg = (old_avg * existing_shares + price * shares_to_buy) / new_shares if existing_shares > 0 and old_avg > 0 else price
                     set_holding(holdings, ticker, new_shares, new_avg)
+                    bought_count += 1
+                    if bought_count >= stocks_to_hold:
+                        break
 
     return buy_lines
 
@@ -411,6 +417,8 @@ def run_execution():
     # ── Run signal engine ───────────────────────────────────────────────────
     log.info("Running signal engine...")
     signals   = run_signals(current_tickers)
+    strength       = signals.get("strength", 1.0)
+    stocks_to_hold = max(1, round(cfg.TOP_N * strength))
     regime    = signals["regime"]
     if cfg.FORCE_RISK_ON:
         regime = "RISK-ON"  # Paper test override
@@ -471,7 +479,7 @@ def run_execution():
             if replacements:
                 port_value = get_portfolio_value(kite, holdings, latest_prices)
                 new_lines  = execute_buys(
-                    kite, replacements, holdings, latest_prices, port_value
+                    kite, replacements, holdings, latest_prices, port_value, strength
                 )
                 buy_lines.extend(new_lines)
                 log.info(f"Immediate replacements bought: {replacements}")
@@ -507,7 +515,7 @@ def run_execution():
         # Buy full top 7 (including rotations)
         port_value    = get_portfolio_value(kite, holdings, latest_prices)
         new_lines     = execute_buys(
-            kite, top_7, holdings, latest_prices, port_value
+            kite, top_7, holdings, latest_prices, port_value, strength, stocks_to_hold
         )
         buy_lines.extend(new_lines)
 

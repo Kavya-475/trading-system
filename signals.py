@@ -25,74 +25,284 @@ from data_manager import load_for_signals, load_index_data
 # NIFTY LARGEMIDCAP 250 UNIVERSE
 # ─────────────────────────────────────────────
 UNIVERSE = {
-    "TCS":"IT","INFY":"IT","HCLTECH":"IT","WIPRO":"IT","TECHM":"IT",
-    "LTIM":"IT","MPHASIS":"IT","PERSISTENT":"IT","COFORGE":"IT",
-    "KPITTECH":"IT","TATAELXSI":"IT","OFSS":"IT",
 
-    "HDFCBANK":"Banking","ICICIBANK":"Banking","SBIN":"Banking",
-    "KOTAKBANK":"Banking","AXISBANK":"Banking","INDUSINDBK":"Banking",
-    "BANDHANBNK":"Banking","FEDERALBNK":"Banking","IDFCFIRSTB":"Banking",
-    "PNB":"Banking","BANKBARODA":"Banking","CANBK":"Banking",
-    "UNIONBANK":"Banking","AUBANK":"Banking","RBLBANK":"Banking",
+    # ── Auto ──
+    "APOLLOTYRE": "Auto",
+    "BAJAJ-AUTO": "Auto",
+    "BALKRISIND": "Auto",
+    "BHARATFORG": "Auto",
+    "BOSCHLTD": "Auto",
+    "EICHERMOT": "Auto",
+    "ENDURANCE": "Auto",
+    "EXIDEIND": "Auto",
+    "HEROMOTOCO": "Auto",
+    "HYUNDAI": "Auto",
+    "M&M": "Auto",
+    "MARUTI": "Auto",
+    "MOTHERSON": "Auto",
+    "MRF": "Auto",
+    "SCHAEFFLER": "Auto",
+    "TIINDIA": "Auto",
+    "TMPV": "Auto",
+    "TVSMOTOR": "Auto",
+    "UNOMINDA": "Auto",
 
-    "BAJFINANCE":"NBFC","BAJAJFINSV":"NBFC","CHOLAFIN":"NBFC",
-    "MUTHOOTFIN":"NBFC","MANAPPURAM":"NBFC","LICHSGFIN":"NBFC",
-    "SUNDARMFIN":"NBFC","SHRIRAMFIN":"NBFC",
+    # ── Capital Goods ──
+    "ABB": "Capital Goods",
+    "AIAENG": "Capital Goods",
+    "APARINDS": "Capital Goods",
+    "APLAPOLLO": "Capital Goods",
+    "ASHOKLEY": "Capital Goods",
+    "ASTRAL": "Capital Goods",
+    "BDL": "Capital Goods",
+    "BEL": "Capital Goods",
+    "BHEL": "Capital Goods",
+    "CGPOWER": "Capital Goods",
+    "COCHINSHIP": "Capital Goods",
+    "CUMMINSIND": "Capital Goods",
+    "ENRIN": "Capital Goods",
+    "ESCORTS": "Capital Goods",
+    "GVT&D": "Capital Goods",
+    "HAL": "Capital Goods",
+    "HONAUT": "Capital Goods",
+    "KEI": "Capital Goods",
+    "MAZDOCK": "Capital Goods",
+    "POLYCAB": "Capital Goods",
+    "POWERINDIA": "Capital Goods",
+    "PREMIERENE": "Capital Goods",
+    "SIEMENS": "Capital Goods",
+    "SUPREMEIND": "Capital Goods",
+    "SUZLON": "Capital Goods",
+    "THERMAX": "Capital Goods",
+    "TMCV": "Capital Goods",
+    "WAAREEENER": "Capital Goods",
 
-    "SBILIFE":"Insurance","HDFCLIFE":"Insurance","ICICIGI":"Insurance",
-    "LICI":"Insurance","STARHEALTH":"Insurance",
+    # ── Cement ──
+    "ACC": "Cement",
+    "AMBUJACEM": "Cement",
+    "DALBHARAT": "Cement",
+    "GRASIM": "Cement",
+    "JKCEMENT": "Cement",
+    "SHREECEM": "Cement",
+    "ULTRACEMCO": "Cement",
 
-    "SUNPHARMA":"Pharma","DRREDDY":"Pharma","CIPLA":"Pharma",
-    "DIVISLAB":"Pharma","LUPIN":"Pharma","TORNTPHARM":"Pharma",
-    "AUROPHARMA":"Pharma","ALKEM":"Pharma","ZYDUSLIFE":"Pharma",
-    "IPCALAB":"Pharma","ABBOTINDIA":"Pharma",
+    # ── Chemicals ──
+    "COROMANDEL": "Chemicals",
+    "FLUOROCHEM": "Chemicals",
+    "LINDEINDIA": "Chemicals",
+    "PIDILITIND": "Chemicals",
+    "PIIND": "Chemicals",
+    "SOLARINDS": "Chemicals",
+    "SRF": "Chemicals",
+    "UPL": "Chemicals",
 
-    "HINDUNILVR":"FMCG","ITC":"FMCG","NESTLEIND":"FMCG",
-    "BRITANNIA":"FMCG","DABUR":"FMCG","MARICO":"FMCG",
-    "COLPAL":"FMCG","GODREJCP":"FMCG","TATACONSUM":"FMCG","VBL":"FMCG","UBL":"FMCG",
+    # ── Consumer ──
+    "ASIANPAINT": "Consumer",
+    "BERGEPAINT": "Consumer",
+    "BLUESTARCO": "Consumer",
+    "DIXON": "Consumer",
+    "DMART": "Consumer",
+    "ETERNAL": "Consumer",
+    "HAVELLS": "Consumer",
+    "INDHOTEL": "Consumer",
+    "IRCTC": "Consumer",
+    "ITCHOTELS": "Consumer",
+    "JUBLFOOD": "Consumer",
+    "KALYANKJIL": "Consumer",
+    "KPRMILL": "Consumer",
+    "LENSKART": "Consumer",
+    "LGEINDIA": "Consumer",
+    "NAUKRI": "Consumer",
+    "NYKAA": "Consumer",
+    "PAGEIND": "Consumer",
+    "SWIGGY": "Consumer",
+    "TITAN": "Consumer",
+    "TRENT": "Consumer",
+    "VMM": "Consumer",
+    "VOLTAS": "Consumer",
 
-    "MARUTI":"Auto","TATAMOTORS":"Auto","EICHERMOT":"Auto",
-    "BAJAJ-AUTO":"Auto","HEROMOTOCO":"Auto","ASHOKLEY":"Auto",
-    "MRF":"Auto","BALKRISIND":"Auto","MOTHERSON":"Auto",
-    "TVSMOTOR":"Auto","M&M":"Auto","BHARATFORG":"Auto","TIINDIA":"Auto",
+    # ── Energy ──
+    "ADANIENSOL": "Energy",
+    "ADANIGREEN": "Energy",
+    "ADANIPOWER": "Energy",
+    "ATGL": "Energy",
+    "BPCL": "Energy",
+    "COALINDIA": "Energy",
+    "GAIL": "Energy",
+    "HINDPETRO": "Energy",
+    "IOC": "Energy",
+    "JSWENERGY": "Energy",
+    "NHPC": "Energy",
+    "NLCINDIA": "Energy",
+    "NTPC": "Energy",
+    "NTPCGREEN": "Energy",
+    "OIL": "Energy",
+    "ONGC": "Energy",
+    "PETRONET": "Energy",
+    "POWERGRID": "Energy",
+    "RELIANCE": "Energy",
+    "SJVN": "Energy",
+    "TATAPOWER": "Energy",
+    "TORNTPOWER": "Energy",
 
-    "LT":"Capital Goods","SIEMENS":"Capital Goods","ABB":"Capital Goods",
-    "HAVELLS":"Capital Goods","BEL":"Capital Goods","HAL":"Capital Goods",
-    "BHEL":"Capital Goods","CGPOWER":"Capital Goods","THERMAX":"Capital Goods",
-    "CUMMINSIND":"Capital Goods","VOLTAS":"Capital Goods","SUZLON":"Capital Goods",
-    "KEC":"Capital Goods",
+    # ── FMCG ──
+    "AWL": "FMCG",
+    "BRITANNIA": "FMCG",
+    "COLPAL": "FMCG",
+    "DABUR": "FMCG",
+    "GODFRYPHLP": "FMCG",
+    "GODREJCP": "FMCG",
+    "HINDUNILVR": "FMCG",
+    "ITC": "FMCG",
+    "MARICO": "FMCG",
+    "NESTLEIND": "FMCG",
+    "PATANJALI": "FMCG",
+    "RADICO": "FMCG",
+    "TATACONSUM": "FMCG",
+    "UBL": "FMCG",
+    "UNITDSPR": "FMCG",
+    "VBL": "FMCG",
 
-    "RELIANCE":"Energy","ONGC":"Energy","BPCL":"Energy","GAIL":"Energy",
-    "TATAPOWER":"Energy","ADANIGREEN":"Energy","NTPC":"Energy",
-    "POWERGRID":"Energy","NHPC":"Energy","TORNTPOWER":"Energy","SJVN":"Energy",
+    # ── Financials ──
+    "360ONE": "Financials",
+    "ABCAPITAL": "Financials",
+    "AIIL": "Financials",
+    "AUBANK": "Financials",
+    "AXISBANK": "Financials",
+    "BAJAJFINSV": "Financials",
+    "BAJAJHFL": "Financials",
+    "BAJAJHLDNG": "Financials",
+    "BAJFINANCE": "Financials",
+    "BANKBARODA": "Financials",
+    "BANKINDIA": "Financials",
+    "BSE": "Financials",
+    "CANBK": "Financials",
+    "CHOLAFIN": "Financials",
+    "CRISIL": "Financials",
+    "FEDERALBNK": "Financials",
+    "GICRE": "Financials",
+    "GROWW": "Financials",
+    "HDBFS": "Financials",
+    "HDFCAMC": "Financials",
+    "HDFCBANK": "Financials",
+    "HDFCLIFE": "Financials",
+    "HUDCO": "Financials",
+    "ICICIAMC": "Financials",
+    "ICICIBANK": "Financials",
+    "ICICIGI": "Financials",
+    "ICICIPRULI": "Financials",
+    "IDFCFIRSTB": "Financials",
+    "INDIANB": "Financials",
+    "INDUSINDBK": "Financials",
+    "IREDA": "Financials",
+    "IRFC": "Financials",
+    "JIOFIN": "Financials",
+    "KOTAKBANK": "Financials",
+    "LICHSGFIN": "Financials",
+    "LICI": "Financials",
+    "LTF": "Financials",
+    "M&MFIN": "Financials",
+    "MAHABANK": "Financials",
+    "MCX": "Financials",
+    "MFSL": "Financials",
+    "MOTILALOFS": "Financials",
+    "MUTHOOTFIN": "Financials",
+    "NAM-INDIA": "Financials",
+    "NIACL": "Financials",
+    "PAYTM": "Financials",
+    "PFC": "Financials",
+    "PNB": "Financials",
+    "POLICYBZR": "Financials",
+    "RECLTD": "Financials",
+    "SBICARD": "Financials",
+    "SBILIFE": "Financials",
+    "SBIN": "Financials",
+    "SHRIRAMFIN": "Financials",
+    "SUNDARMFIN": "Financials",
+    "TATACAP": "Financials",
+    "TATAINVEST": "Financials",
+    "UNIONBANK": "Financials",
+    "YESBANK": "Financials",
 
-    "PIDILITIND":"Chemicals","DEEPAKNTR":"Chemicals","SRF":"Chemicals",
-    "AARTIIND":"Chemicals","NAVINFLUOR":"Chemicals","ATUL":"Chemicals",
-    "ALKYLAMINE":"Chemicals",
+    # ── Healthcare ──
+    "ABBOTINDIA": "Healthcare",
+    "AJANTPHARM": "Healthcare",
+    "ALKEM": "Healthcare",
+    "ANTHEM": "Healthcare",
+    "APOLLOHOSP": "Healthcare",
+    "AUROPHARMA": "Healthcare",
+    "BIOCON": "Healthcare",
+    "CIPLA": "Healthcare",
+    "DIVISLAB": "Healthcare",
+    "DRREDDY": "Healthcare",
+    "FORTIS": "Healthcare",
+    "GLAXO": "Healthcare",
+    "GLENMARK": "Healthcare",
+    "IPCALAB": "Healthcare",
+    "LAURUSLABS": "Healthcare",
+    "LUPIN": "Healthcare",
+    "MANKIND": "Healthcare",
+    "MAXHEALTH": "Healthcare",
+    "MEDANTA": "Healthcare",
+    "SUNPHARMA": "Healthcare",
+    "TORNTPHARM": "Healthcare",
+    "ZYDUSLIFE": "Healthcare",
 
-    "ASIANPAINT":"Paints","BERGEPAINT":"Paints","KANSAINER":"Paints",
+    # ── IT ──
+    "COFORGE": "IT",
+    "HCLTECH": "IT",
+    "HEXT": "IT",
+    "INFY": "IT",
+    "KPITTECH": "IT",
+    "LTM": "IT",
+    "LTTS": "IT",
+    "MPHASIS": "IT",
+    "OFSS": "IT",
+    "PERSISTENT": "IT",
+    "TATAELXSI": "IT",
+    "TCS": "IT",
+    "TECHM": "IT",
+    "WIPRO": "IT",
 
-    "TITAN":"Consumer","TRENT":"Consumer","DMART":"Consumer",
-    "PAGEIND":"Consumer","JUBLFOOD":"Consumer","IRCTC":"Consumer",
-    "NAUKRI":"Consumer","ZOMATO":"Consumer","INDIAMART":"Consumer",
+    # ── Industrials ──
+    "3MINDIA": "Industrials",
+    "ADANIPORTS": "Industrials",
+    "CONCOR": "Industrials",
+    "GMRAIRPORT": "Industrials",
+    "GODREJIND": "Industrials",
+    "INDIGO": "Industrials",
+    "JSWINFRA": "Industrials",
+    "LT": "Industrials",
+    "RVNL": "Industrials",
 
-    "ULTRACEMCO":"Cement","SHREECEM":"Cement","AMBUJACEM":"Cement",
-    "GRASIM":"Cement","JKCEMENT":"Cement",
+    # ── Metals ──
+    "ADANIENT": "Metals",
+    "HINDALCO": "Metals",
+    "HINDZINC": "Metals",
+    "JINDALSTEL": "Metals",
+    "JSL": "Metals",
+    "JSWSTEEL": "Metals",
+    "LLOYDSME": "Metals",
+    "NATIONALUM": "Metals",
+    "NMDC": "Metals",
+    "SAIL": "Metals",
+    "TATASTEEL": "Metals",
+    "VEDL": "Metals",
 
-    "JSWSTEEL":"Metals","TATASTEEL":"Metals","HINDALCO":"Metals",
-    "VEDL":"Metals","SAIL":"Metals","COALINDIA":"Metals","APLAPOLLO":"Metals",
+    # ── Realty ──
+    "DLF": "Realty",
+    "GODREJPROP": "Realty",
+    "LODHA": "Realty",
+    "OBEROIRLTY": "Realty",
+    "PHOENIXLTD": "Realty",
+    "PRESTIGE": "Realty",
 
-    "BHARTIARTL":"Telecom","TATACOMM":"Telecom",
-
-    "DLF":"Realty","GODREJPROP":"Realty","OBEROIRLTY":"Realty",
-    "PRESTIGE":"Realty","LODHA":"Realty","PHOENIXLTD":"Realty","BRIGADE":"Realty",
-
-    "APOLLOHOSP":"Healthcare","MAXHEALTH":"Healthcare","FORTIS":"Healthcare",
-
-    "ADANIPORTS":"Infrastructure","ADANIENT":"Infrastructure","IRB":"Infrastructure",
-
-    "CDSL":"Financials","BSE":"Financials","MCX":"Financials",
-    "ANGELONE":"Financials","CAMS":"Financials","360ONE":"Financials","HDFCAMC":"Financials",
+    # ── Telecom ──
+    "BHARTIARTL": "Telecom",
+    "BHARTIHEXA": "Telecom",
+    "IDEA": "Telecom",
+    "INDUSTOWER": "Telecom",
+    "TATACOMM": "Telecom",
 }
 
 
@@ -234,6 +444,49 @@ def check_exit_signals(close: pd.DataFrame, scored: pd.DataFrame,
 # ─────────────────────────────────────────────
 # MAIN — reads from cache, zero network calls
 # ─────────────────────────────────────────────
+
+def regime_strength(nifty500, nifty100, nifty_midcap) -> float:
+    """
+    Weighted regime strength score.
+    Returns 0.0 (full cash) to 1.0 (fully invested).
+    Only used when cfg.REGIME_WEIGHTED = True.
+    """
+    def margin_above_dma(series, dma=200):
+        d = series.dropna()
+        if len(d) < dma:
+            return 0.0
+        latest = float(d.iloc[-1])
+        avg    = float(d.rolling(dma).mean().iloc[-1])
+        return (latest - avg) / avg
+
+    m500  = margin_above_dma(nifty500)
+    m100  = margin_above_dma(nifty100)
+    mmid  = margin_above_dma(nifty_midcap)
+
+    composite = (cfg.REGIME_WEIGHT_NIFTY500 * m500 +
+                 cfg.REGIME_WEIGHT_NIFTY100  * m100 +
+                 cfg.REGIME_WEIGHT_MIDCAP    * mmid)
+
+    # Normalise to 0-1
+    fraction = (composite - cfg.REGIME_DEPLOY_MIN) / (cfg.REGIME_DEPLOY_MAX - cfg.REGIME_DEPLOY_MIN)
+    fraction = max(0.0, min(1.0, fraction))
+
+    print(f"  Nifty 500  margin: {m500*100:>+.2f}%")
+    print(f"  Nifty 100  margin: {m100*100:>+.2f}%")
+    print(f"  Midcap     margin: {mmid*100:>+.2f}%")
+    print(f"  Composite  margin: {composite*100:>+.2f}%")
+    print(f"  Deploy fraction  : {fraction*100:.0f}%")
+
+    return fraction
+
+
+def get_regime(nifty500):
+    """Original binary regime check — used when REGIME_WEIGHTED = False."""
+    d = nifty500.dropna()
+    if len(d) < cfg.REGIME_DMA:
+        return "RISK-ON"
+    return "RISK-ON" if d.iloc[-1] > d.rolling(cfg.REGIME_DMA).mean().iloc[-1] else "RISK-OFF"
+
 def run_signals(current_holdings: list = []) -> dict:
     """
     Full signal pipeline using cached data.
@@ -241,16 +494,24 @@ def run_signals(current_holdings: list = []) -> dict:
     """
     # Load from cache
     close, volume = load_for_signals()
-    nifty500, _   = load_index_data()
+    nifty500, nifty50, nifty100, nifty_mid = load_index_data()
 
-    regime = get_regime(nifty500)
+    strength = 1.0  # default — fully deployed
 
-    if regime == "RISK-OFF":
-        print("\nRISK-OFF → Hold cash. Sell all holdings.")
+    if cfg.REGIME_WEIGHTED:
+        strength = regime_strength(nifty500, nifty100, nifty_mid)
+        regime   = 'RISK-ON' if strength > 0 else 'RISK-OFF'
+        print(f'  Deploy fraction  : {strength*100:.0f}%')
+    else:
+        regime = get_regime(nifty500)
+
+    if regime == 'RISK-OFF':
+        print('\nRISK-OFF → Hold cash. Sell all holdings.')
         if cfg.FORCE_RISK_ON:
-            regime = "RISK-ON"  # Paper test override
+            regime   = 'RISK-ON'
+            strength = 1.0
         else:
-            return {"regime":regime,"portfolio":pd.DataFrame(),"exits":current_holdings}
+            return {'regime':regime,'portfolio':pd.DataFrame(),'exits':current_holdings,'strength':0.0}
     tickers  = list(UNIVERSE.keys())
     liquid   = apply_liquidity_filter(close, volume, tickers)
     print(f"\nComputing scores for {len(liquid)} stocks...")
@@ -262,7 +523,7 @@ def run_signals(current_holdings: list = []) -> dict:
 
     portfolio = select_portfolio(scored)
     exits     = check_exit_signals(close, scored, current_holdings)
-    return {"regime":regime,"portfolio":portfolio,"exits":exits}
+    return {"regime":regime,"portfolio":portfolio,"exits":exits,"strength":strength}
 
 
 # ─────────────────────────────────────────────

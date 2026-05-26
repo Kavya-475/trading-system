@@ -230,3 +230,298 @@
 2026-05-25 04:25:01 | INFO | Telegram notification sent
 2026-05-25 04:25:01 | INFO | Final portfolio: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
 2026-05-25 04:25:01 | INFO | =======================================================
+2026-05-25 10:58:58 | INFO | =======================================================
+2026-05-25 10:58:58 | INFO | EXECUTION RUN — 2026-05-25 10:58:58
+2026-05-25 10:58:58 | INFO | MODE          : PAPER
+2026-05-25 10:58:58 | INFO | =======================================================
+2026-05-25 10:59:31 | INFO | =======================================================
+2026-05-25 10:59:31 | INFO | EXECUTION RUN — 2026-05-25 10:59:31
+2026-05-25 10:59:31 | INFO | MODE          : PAPER
+2026-05-25 10:59:31 | INFO | =======================================================
+2026-05-25 10:59:31 | INFO | Current holdings: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+2026-05-25 10:59:32 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-25 10:59:32 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-25 10:59:32 | INFO | Running signal engine...
+2026-05-25 10:59:33 | INFO | Regime: RISK-ON
+2026-05-25 10:59:33 | INFO | Holdings saved: {'MCX': 4, 'BHARATFORG': 7, 'CUMMINSIND': 2, 'BSE': 3, 'BHEL': 34, 'HINDALCO': 12, 'SAIL': 70}
+2026-05-25 10:59:34 | INFO | Telegram notification sent
+2026-05-25 10:59:34 | INFO | Final portfolio: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+2026-05-25 10:59:34 | INFO | =======================================================
+2026-05-25 11:00:48 | INFO | =======================================================
+2026-05-25 11:00:48 | INFO | EXECUTION RUN — 2026-05-25 11:00:48
+2026-05-25 11:00:48 | INFO | MODE          : PAPER
+2026-05-25 11:00:48 | INFO | =======================================================
+2026-05-25 11:00:48 | INFO | Current holdings: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+2026-05-25 11:00:48 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-25 11:00:48 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-25 11:00:48 | INFO | Running signal engine...
+2026-05-25 11:00:49 | INFO | Regime: RISK-ON
+2026-05-25 11:00:50 | INFO | Holdings saved: {'MCX': 4, 'BHARATFORG': 7, 'CUMMINSIND': 2, 'BSE': 3, 'BHEL': 34, 'HINDALCO': 12, 'SAIL': 70}
+2026-05-25 11:00:51 | INFO | Telegram notification sent
+2026-05-25 11:00:51 | INFO | Final portfolio: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+2026-05-25 11:00:51 | INFO | =======================================================
+2026-05-25 11:01:20 | INFO | =======================================================
+2026-05-25 11:01:20 | INFO | EXECUTION RUN — 2026-05-25 11:01:20
+2026-05-25 11:01:20 | INFO | MODE          : PAPER
+2026-05-25 11:01:20 | INFO | =======================================================
+2026-05-25 11:01:50 | INFO | =======================================================
+2026-05-25 11:01:50 | INFO | EXECUTION RUN — 2026-05-25 11:01:50
+2026-05-25 11:01:50 | INFO | MODE          : PAPER
+2026-05-25 11:01:50 | INFO | =======================================================
+2026-05-25 11:01:50 | INFO | Current holdings: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+2026-05-25 11:01:50 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-25 11:01:50 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-25 11:01:50 | INFO | Running signal engine...
+2026-05-25 11:01:51 | INFO | Regime: RISK-ON
+2026-05-25 11:01:52 | INFO | Holdings saved: {'MCX': 4, 'BHARATFORG': 7, 'CUMMINSIND': 2, 'BSE': 3, 'BHEL': 34, 'HINDALCO': 12, 'SAIL': 70}
+2026-05-25 11:02:15 | INFO | =======================================================
+2026-05-25 11:02:15 | INFO | EXECUTION RUN — 2026-05-25 11:02:15
+2026-05-25 11:02:15 | INFO | MODE          : PAPER
+2026-05-25 11:02:15 | INFO | =======================================================
+2026-05-25 11:02:15 | INFO | Current holdings: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+2026-05-25 11:02:15 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-25 11:02:15 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-25 11:02:15 | INFO | Running signal engine...
+2026-05-25 11:02:15 | INFO | Regime: RISK-ON
+2026-05-25 11:02:16 | INFO | Holdings saved: {'MCX': 4, 'BHARATFORG': 7, 'CUMMINSIND': 2, 'BSE': 3, 'BHEL': 34, 'HINDALCO': 12, 'SAIL': 70}
+2026-05-25 11:02:36 | INFO | =======================================================
+2026-05-25 11:02:36 | INFO | EXECUTION RUN — 2026-05-25 11:02:36
+2026-05-25 11:02:36 | INFO | MODE          : PAPER
+2026-05-25 11:02:36 | INFO | =======================================================
+2026-05-25 11:02:36 | INFO | Current holdings: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+2026-05-25 11:02:36 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-25 11:02:36 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-25 11:02:36 | INFO | Running signal engine...
+2026-05-25 11:02:37 | INFO | Regime: RISK-ON
+2026-05-25 11:02:38 | INFO | Holdings saved: {'MCX': 4, 'BHARATFORG': 7, 'CUMMINSIND': 2, 'BSE': 3, 'BHEL': 34, 'HINDALCO': 12, 'SAIL': 70}
+2026-05-25 11:02:38 | INFO | Telegram notification sent
+2026-05-25 11:03:35 | INFO | =======================================================
+2026-05-25 11:03:35 | INFO | EXECUTION RUN — 2026-05-25 11:03:35
+2026-05-25 11:03:35 | INFO | MODE          : PAPER
+2026-05-25 11:03:35 | INFO | =======================================================
+2026-05-25 11:03:35 | INFO | Current holdings: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+2026-05-25 11:03:35 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-25 11:03:35 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-25 11:03:35 | INFO | Running signal engine...
+2026-05-25 11:03:36 | INFO | Regime: RISK-ON
+2026-05-25 11:03:37 | INFO | Holdings saved: {'MCX': 4, 'BHARATFORG': 7, 'CUMMINSIND': 2, 'BSE': 3, 'BHEL': 34, 'HINDALCO': 12, 'SAIL': 70}
+2026-05-25 11:03:37 | INFO | Telegram notification sent
+2026-05-25 11:03:37 | INFO | Final portfolio: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+2026-05-25 11:03:37 | INFO | =======================================================
+2026-05-25 11:04:14 | INFO | =======================================================
+2026-05-25 11:04:14 | INFO | EXECUTION RUN — 2026-05-25 11:04:14
+2026-05-25 11:04:14 | INFO | MODE          : PAPER
+2026-05-25 11:04:14 | INFO | =======================================================
+2026-05-25 11:04:14 | INFO | Current holdings: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+2026-05-25 11:04:14 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-25 11:04:14 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-25 11:04:14 | INFO | Running signal engine...
+2026-05-25 11:04:15 | INFO | Regime: RISK-ON
+2026-05-25 11:04:15 | INFO | Holdings saved: {'MCX': 4, 'BHARATFORG': 7, 'CUMMINSIND': 2, 'BSE': 3, 'BHEL': 34, 'HINDALCO': 12, 'SAIL': 70}
+2026-05-25 11:04:16 | INFO | Telegram notification sent
+2026-05-25 11:04:16 | INFO | Final portfolio: ['MCX', 'BHARATFORG', 'CUMMINSIND', 'BSE', 'BHEL', 'HINDALCO', 'SAIL']
+2026-05-25 11:04:16 | INFO | =======================================================
+2026-05-25 12:51:13 | INFO | =======================================================
+2026-05-25 12:51:13 | INFO | EXECUTION RUN — 2026-05-25 12:51:13
+2026-05-25 12:51:13 | INFO | MODE          : PAPER
+2026-05-25 12:51:13 | INFO | =======================================================
+2026-05-25 12:51:13 | INFO | Current holdings: None (empty)
+2026-05-25 12:51:13 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-25 12:51:13 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-25 12:51:13 | INFO | Running signal engine...
+2026-05-25 12:51:14 | INFO | Regime: RISK-ON
+2026-05-25 12:51:15 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-25 12:51:15 | INFO | [PAPER] BUY  | NATIONALUM      |    35 shares @ ₹   404.8 | Total: ₹    14,168
+2026-05-25 14:23:28 | INFO | =======================================================
+2026-05-25 14:23:28 | INFO | EXECUTION RUN — 2026-05-25 14:23:28
+2026-05-25 14:23:28 | INFO | MODE          : PAPER
+2026-05-25 14:23:28 | INFO | =======================================================
+2026-05-25 14:23:28 | INFO | Current holdings: None (empty)
+2026-05-25 14:23:29 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-25 14:23:29 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-25 14:23:29 | INFO | Running signal engine...
+2026-05-25 14:23:29 | INFO | Regime: RISK-ON
+2026-05-25 14:23:30 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-25 14:23:30 | INFO | [PAPER] BUY  | NATIONALUM      |    35 shares @ ₹   404.8 | Total: ₹    14,168
+2026-05-25 14:23:57 | INFO | =======================================================
+2026-05-25 14:23:57 | INFO | EXECUTION RUN — 2026-05-25 14:23:57
+2026-05-25 14:23:57 | INFO | MODE          : PAPER
+2026-05-25 14:23:57 | INFO | =======================================================
+2026-05-25 14:23:57 | INFO | Current holdings: None (empty)
+2026-05-25 14:23:58 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-25 14:23:58 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-25 14:23:58 | INFO | Running signal engine...
+2026-05-25 14:23:59 | INFO | Regime: RISK-ON
+2026-05-25 14:23:59 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-25 14:23:59 | INFO | [PAPER] BUY  | NATIONALUM      |    35 shares @ ₹   404.8 | Total: ₹    14,168
+2026-05-25 14:23:59 | INFO | [PAPER] BUY  | GVT&D           |     2 shares @ ₹  4795.3 | Total: ₹     9,591
+2026-05-25 14:23:59 | INFO | [PAPER] BUY  | APARINDS        |     1 shares @ ₹ 12586.6 | Total: ₹    12,587
+2026-05-25 14:23:59 | INFO | [PAPER] BUY  | MCX             |     4 shares @ ₹  3352.7 | Total: ₹    13,411
+2026-05-25 14:23:59 | INFO | [PAPER] BUY  | BHARATFORG      |     7 shares @ ₹  1926.1 | Total: ₹    13,483
+2026-05-25 14:23:59 | INFO | [PAPER] BUY  | ADANIPOWER      |    61 shares @ ₹   233.4 | Total: ₹    14,237
+2026-05-25 14:23:59 | INFO | Holdings saved: {'NATIONALUM': 35, 'GVT&D': 2, 'APARINDS': 1, 'MCX': 4, 'BHARATFORG': 7, 'ADANIPOWER': 61}
+2026-05-25 14:24:00 | INFO | Telegram notification sent
+2026-05-25 14:24:00 | INFO | Final portfolio: ['NATIONALUM', 'GVT&D', 'APARINDS', 'MCX', 'BHARATFORG', 'ADANIPOWER']
+2026-05-25 14:24:00 | INFO | =======================================================
+2026-05-26 03:50:44 | INFO | =======================================================
+2026-05-26 03:50:45 | INFO | EXECUTION RUN — 2026-05-26 03:50:45
+2026-05-26 03:50:45 | INFO | MODE          : PAPER
+2026-05-26 03:50:45 | INFO | =======================================================
+2026-05-26 03:50:45 | INFO | Current holdings: None (empty)
+2026-05-26 03:50:45 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-26 03:50:45 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-26 03:50:45 | INFO | Running signal engine...
+2026-05-26 03:50:46 | INFO | Regime: RISK-ON
+2026-05-26 03:50:46 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-26 03:51:12 | INFO | =======================================================
+2026-05-26 03:51:12 | INFO | EXECUTION RUN — 2026-05-26 03:51:12
+2026-05-26 03:51:12 | INFO | MODE          : PAPER
+2026-05-26 03:51:12 | INFO | =======================================================
+2026-05-26 03:51:12 | INFO | Current holdings: None (empty)
+2026-05-26 03:51:12 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-26 03:51:12 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-26 03:51:12 | INFO | Running signal engine...
+2026-05-26 03:51:13 | INFO | Regime: RISK-ON
+2026-05-26 03:51:13 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-26 03:51:13 | INFO | Regime strength: 57% | Deploying 4 positions @ 14,144 each
+2026-05-26 03:51:13 | INFO | [PAPER] BUY  | NATIONALUM      |    35 shares @ ₹   404.8 | Total: ₹    14,168
+2026-05-26 03:51:13 | INFO | [PAPER] BUY  | GVT&D           |     2 shares @ ₹  4795.3 | Total: ₹     9,591
+2026-05-26 03:51:13 | INFO | [PAPER] BUY  | APARINDS        |     1 shares @ ₹ 12586.6 | Total: ₹    12,587
+2026-05-26 03:51:13 | INFO | [PAPER] BUY  | MCX             |     4 shares @ ₹  3352.7 | Total: ₹    13,411
+2026-05-26 03:51:13 | INFO | [PAPER] BUY  | BHARATFORG      |     7 shares @ ₹  1926.1 | Total: ₹    13,483
+2026-05-26 03:51:13 | INFO | [PAPER] BUY  | ADANIPOWER      |    60 shares @ ₹   233.4 | Total: ₹    14,004
+2026-05-26 03:51:13 | INFO | Holdings saved: {'NATIONALUM': 35, 'GVT&D': 2, 'APARINDS': 1, 'MCX': 4, 'BHARATFORG': 7, 'ADANIPOWER': 60}
+2026-05-26 03:51:14 | INFO | Telegram notification sent
+2026-05-26 03:51:14 | INFO | Final portfolio: ['NATIONALUM', 'GVT&D', 'APARINDS', 'MCX', 'BHARATFORG', 'ADANIPOWER']
+2026-05-26 03:51:14 | INFO | =======================================================
+2026-05-26 03:54:14 | INFO | =======================================================
+2026-05-26 03:54:14 | INFO | EXECUTION RUN — 2026-05-26 03:54:14
+2026-05-26 03:54:14 | INFO | MODE          : PAPER
+2026-05-26 03:54:14 | INFO | =======================================================
+2026-05-26 03:54:14 | INFO | Current holdings: None (empty)
+2026-05-26 03:54:14 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-26 03:54:14 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-26 03:54:14 | INFO | Running signal engine...
+2026-05-26 03:54:15 | INFO | Regime: RISK-ON
+2026-05-26 03:54:16 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-26 03:54:42 | INFO | =======================================================
+2026-05-26 03:54:42 | INFO | EXECUTION RUN — 2026-05-26 03:54:42
+2026-05-26 03:54:42 | INFO | MODE          : PAPER
+2026-05-26 03:54:42 | INFO | =======================================================
+2026-05-26 03:54:42 | INFO | Current holdings: None (empty)
+2026-05-26 03:54:43 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-26 03:54:43 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-26 03:54:43 | INFO | Running signal engine...
+2026-05-26 03:54:43 | INFO | Regime: RISK-ON
+2026-05-26 03:54:44 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-26 03:55:34 | INFO | =======================================================
+2026-05-26 03:55:34 | INFO | EXECUTION RUN — 2026-05-26 03:55:34
+2026-05-26 03:55:34 | INFO | MODE          : PAPER
+2026-05-26 03:55:34 | INFO | =======================================================
+2026-05-26 03:55:34 | INFO | Current holdings: None (empty)
+2026-05-26 03:55:34 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-26 03:55:34 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-26 03:55:34 | INFO | Running signal engine...
+2026-05-26 03:55:35 | INFO | Regime: RISK-ON
+2026-05-26 03:55:36 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-26 03:55:36 | INFO | Regime strength: 57% | Deploying 4 positions @ 14,144 each
+2026-05-26 03:55:36 | INFO | [PAPER] BUY  | NATIONALUM      |    35 shares @ ₹   404.8 | Total: ₹    14,168
+2026-05-26 03:55:36 | INFO | [PAPER] BUY  | GVT&D           |     2 shares @ ₹  4795.3 | Total: ₹     9,591
+2026-05-26 03:55:36 | INFO | [PAPER] BUY  | APARINDS        |     1 shares @ ₹ 12586.6 | Total: ₹    12,587
+2026-05-26 03:55:36 | INFO | [PAPER] BUY  | MCX             |     4 shares @ ₹  3352.7 | Total: ₹    13,411
+2026-05-26 03:55:36 | INFO | [PAPER] BUY  | BHARATFORG      |     7 shares @ ₹  1926.1 | Total: ₹    13,483
+2026-05-26 03:55:36 | INFO | [PAPER] BUY  | ADANIPOWER      |    60 shares @ ₹   233.4 | Total: ₹    14,004
+2026-05-26 03:55:36 | INFO | Holdings saved: {'NATIONALUM': 35, 'GVT&D': 2, 'APARINDS': 1, 'MCX': 4, 'BHARATFORG': 7, 'ADANIPOWER': 60}
+2026-05-26 03:55:36 | INFO | Telegram notification sent
+2026-05-26 03:55:36 | INFO | Final portfolio: ['NATIONALUM', 'GVT&D', 'APARINDS', 'MCX', 'BHARATFORG', 'ADANIPOWER']
+2026-05-26 03:55:36 | INFO | =======================================================
+2026-05-26 03:57:13 | INFO | =======================================================
+2026-05-26 03:57:13 | INFO | EXECUTION RUN — 2026-05-26 03:57:13
+2026-05-26 03:57:13 | INFO | MODE          : PAPER
+2026-05-26 03:57:13 | INFO | =======================================================
+2026-05-26 03:57:13 | INFO | Current holdings: None (empty)
+2026-05-26 03:57:13 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-26 03:57:13 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-26 03:57:13 | INFO | Running signal engine...
+2026-05-26 03:57:14 | INFO | Regime: RISK-ON
+2026-05-26 03:57:14 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-26 03:57:14 | INFO | Regime strength: 57% | Deploying 4 positions @ 14,144 each
+2026-05-26 03:57:14 | INFO | [PAPER] BUY  | NATIONALUM      |    35 shares @ ₹   404.8 | Total: ₹    14,168
+2026-05-26 03:57:14 | INFO | [PAPER] BUY  | GVT&D           |     2 shares @ ₹  4795.3 | Total: ₹     9,591
+2026-05-26 03:57:14 | INFO | [PAPER] BUY  | APARINDS        |     1 shares @ ₹ 12586.6 | Total: ₹    12,587
+2026-05-26 03:57:14 | INFO | Holdings saved: {'NATIONALUM': 35, 'GVT&D': 2, 'APARINDS': 1}
+2026-05-26 03:57:15 | INFO | Telegram notification sent
+2026-05-26 03:57:15 | INFO | Final portfolio: ['NATIONALUM', 'GVT&D', 'APARINDS']
+2026-05-26 03:57:15 | INFO | =======================================================
+2026-05-26 03:57:54 | INFO | =======================================================
+2026-05-26 03:57:54 | INFO | EXECUTION RUN — 2026-05-26 03:57:54
+2026-05-26 03:57:54 | INFO | MODE          : PAPER
+2026-05-26 03:57:54 | INFO | =======================================================
+2026-05-26 03:57:54 | INFO | Current holdings: None (empty)
+2026-05-26 03:57:55 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-26 03:57:55 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-26 03:57:55 | INFO | Running signal engine...
+2026-05-26 03:57:55 | INFO | Regime: RISK-ON
+2026-05-26 03:57:56 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-26 03:57:56 | INFO | Regime strength: 57% | Deploying 4 positions @ 14,144 each
+2026-05-26 03:57:56 | INFO | [PAPER] BUY  | NATIONALUM      |    35 shares @ ₹   404.8 | Total: ₹    14,168
+2026-05-26 03:57:56 | INFO | [PAPER] BUY  | GVT&D           |     2 shares @ ₹  4795.3 | Total: ₹     9,591
+2026-05-26 03:57:56 | INFO | [PAPER] BUY  | APARINDS        |     1 shares @ ₹ 12586.6 | Total: ₹    12,587
+2026-05-26 03:57:56 | INFO | [PAPER] BUY  | MCX             |     4 shares @ ₹  3352.7 | Total: ₹    13,411
+2026-05-26 03:57:56 | INFO | [PAPER] BUY  | BHARATFORG      |     7 shares @ ₹  1926.1 | Total: ₹    13,483
+2026-05-26 03:57:56 | INFO | [PAPER] BUY  | ADANIPOWER      |    60 shares @ ₹   233.4 | Total: ₹    14,004
+2026-05-26 03:57:56 | INFO | Holdings saved: {'NATIONALUM': 35, 'GVT&D': 2, 'APARINDS': 1, 'MCX': 4, 'BHARATFORG': 7, 'ADANIPOWER': 60}
+2026-05-26 03:57:57 | INFO | Telegram notification sent
+2026-05-26 03:57:57 | INFO | Final portfolio: ['NATIONALUM', 'GVT&D', 'APARINDS', 'MCX', 'BHARATFORG', 'ADANIPOWER']
+2026-05-26 03:57:57 | INFO | =======================================================
+2026-05-26 03:58:34 | INFO | =======================================================
+2026-05-26 03:58:34 | INFO | EXECUTION RUN — 2026-05-26 03:58:34
+2026-05-26 03:58:34 | INFO | MODE          : PAPER
+2026-05-26 03:58:34 | INFO | =======================================================
+2026-05-26 03:58:34 | INFO | Current holdings: None (empty)
+2026-05-26 03:58:35 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-26 03:58:35 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-26 03:58:35 | INFO | Running signal engine...
+2026-05-26 03:58:35 | INFO | Regime: RISK-ON
+2026-05-26 03:58:36 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-26 03:58:36 | INFO | Regime strength: 57% | Deploying 4 positions @ 14,144 each
+2026-05-26 03:58:36 | INFO | [PAPER] BUY  | NATIONALUM      |    35 shares @ ₹   404.8 | Total: ₹    14,168
+2026-05-26 03:58:36 | INFO | [PAPER] BUY  | GVT&D           |     2 shares @ ₹  4795.3 | Total: ₹     9,591
+2026-05-26 03:58:36 | INFO | [PAPER] BUY  | APARINDS        |     1 shares @ ₹ 12586.6 | Total: ₹    12,587
+2026-05-26 03:58:36 | INFO | [PAPER] BUY  | MCX             |     4 shares @ ₹  3352.7 | Total: ₹    13,411
+2026-05-26 03:58:36 | INFO | Holdings saved: {'NATIONALUM': 35, 'GVT&D': 2, 'APARINDS': 1, 'MCX': 4}
+2026-05-26 03:58:37 | INFO | Telegram notification sent
+2026-05-26 03:58:37 | INFO | Final portfolio: ['NATIONALUM', 'GVT&D', 'APARINDS', 'MCX']
+2026-05-26 03:58:37 | INFO | =======================================================
+2026-05-26 03:59:14 | INFO | =======================================================
+2026-05-26 03:59:14 | INFO | EXECUTION RUN — 2026-05-26 03:59:14
+2026-05-26 03:59:14 | INFO | MODE          : PAPER
+2026-05-26 03:59:14 | INFO | =======================================================
+2026-05-26 03:59:14 | INFO | Current holdings: ['NATIONALUM', 'GVT&D', 'APARINDS', 'MCX']
+2026-05-26 03:59:14 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-26 03:59:14 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-26 03:59:14 | INFO | Running signal engine...
+2026-05-26 03:59:15 | INFO | Regime: RISK-ON
+2026-05-26 03:59:16 | INFO | Holdings saved: {'NATIONALUM': 35, 'GVT&D': 2, 'APARINDS': 1, 'MCX': 4}
+2026-05-26 03:59:16 | INFO | Telegram notification sent
+2026-05-26 03:59:16 | INFO | Final portfolio: ['NATIONALUM', 'GVT&D', 'APARINDS', 'MCX']
+2026-05-26 03:59:16 | INFO | =======================================================
+2026-05-26 04:00:05 | INFO | =======================================================
+2026-05-26 04:00:05 | INFO | EXECUTION RUN — 2026-05-26 04:00:05
+2026-05-26 04:00:05 | INFO | MODE          : PAPER
+2026-05-26 04:00:05 | INFO | =======================================================
+2026-05-26 04:00:05 | INFO | Current holdings: None (empty)
+2026-05-26 04:00:05 | INFO | Loaded latest prices for 250 stocks from cache
+2026-05-26 04:00:05 | INFO | PAPER MODE — Kite Connect not initialised
+2026-05-26 04:00:05 | INFO | Running signal engine...
+2026-05-26 04:00:06 | INFO | Regime: RISK-ON
+2026-05-26 04:00:07 | INFO | Full monthly rebalance — reviewing all positions...
+2026-05-26 04:00:07 | INFO | Regime strength: 57% | Deploying 4 positions @ 14,144 each
+2026-05-26 04:00:07 | INFO | [PAPER] BUY  | NATIONALUM      |    35 shares @ ₹   404.8 | Total: ₹    14,168
+2026-05-26 04:00:07 | INFO | [PAPER] BUY  | GVT&D           |     2 shares @ ₹  4795.3 | Total: ₹     9,591
+2026-05-26 04:00:07 | INFO | [PAPER] BUY  | APARINDS        |     1 shares @ ₹ 12586.6 | Total: ₹    12,587
+2026-05-26 04:00:07 | INFO | [PAPER] BUY  | MCX             |     4 shares @ ₹  3352.7 | Total: ₹    13,411
+2026-05-26 04:00:07 | INFO | Holdings saved: {'NATIONALUM': 35, 'GVT&D': 2, 'APARINDS': 1, 'MCX': 4}
+2026-05-26 04:00:07 | INFO | Telegram notification sent
+2026-05-26 04:00:07 | INFO | Final portfolio: ['NATIONALUM', 'GVT&D', 'APARINDS', 'MCX']
+2026-05-26 04:00:07 | INFO | =======================================================
