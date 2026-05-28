@@ -509,10 +509,9 @@ def get_open_price(open_prices, ticker, date):
 
 def get_fill_price(close_price, open_price, side, rank=0):
     """
-    Simulates realistic order fill.
-    Buy orders placed at close + buffer, executed next day at open.
-    Sell orders placed at close - buffer, executed next day at open.
-    Returns fill price if order fills, None if it misses.
+    Realistic fill model using next day open price.
+    Buy:  fills at open price if open <= close x buffer, else missed
+    Sell: fills at open price if open >= close x 0.99, else missed
     """
     if side == "buy":
         if rank < 5:
@@ -529,8 +528,7 @@ def get_fill_price(close_price, open_price, side, rank=0):
         else:
             return None
     else:
-        buffer = 0.010
-        limit  = close_price * (1 - buffer)
+        limit = close_price * 0.990
         if open_price > 0 and open_price >= limit:
             return open_price
         elif open_price == 0:

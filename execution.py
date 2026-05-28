@@ -492,7 +492,7 @@ def run_execution():
             shares = holdings.get(ticker, 0)
             if shares > 0:
                 price      = latest_prices.get(ticker, 0)
-                sell_price = round(price * 0.999, 1)
+                sell_price = round(price * 0.99, 1)
                 res        = place_sell_order(kite, ticker, shares, sell_price)
                 sell_lines.append(f"SELL {ticker} ×{shares} @ ₹{sell_price}")
                 if res["status"] in ("paper", "placed"):
@@ -524,7 +524,7 @@ def run_execution():
             shares = holdings.get(ticker, 0)
             if shares > 0:
                 price      = latest_prices.get(ticker, 0)
-                sell_price = round(price * 0.999, 1)
+                sell_price = round(price * 0.99, 1)
                 res        = place_sell_order(kite, ticker, shares, sell_price)
                 sell_lines.append(f"SELL {ticker} ×{shares} @ ₹{sell_price}")
                 if res["status"] in ("paper", "placed"):
@@ -564,7 +564,7 @@ def run_execution():
             shares = holdings.get(ticker, 0)
             if shares > 0:
                 price      = latest_prices.get(ticker, 0)
-                sell_price = round(price * 0.999, 1)
+                sell_price = round(price * 0.99, 1)
                 res        = place_sell_order(kite, ticker, shares, sell_price)
                 sell_lines.append(f"SELL {ticker} ×{shares} @ ₹{sell_price} [rotation]")
                 if res["status"] in ("paper", "placed"):

@@ -30,7 +30,7 @@ LOOKBACK_6M     = 126   # ~6 months
 LOOKBACK_3M     = 63    # ~3 months  ← NEW
 SKIP_RECENT     = 20    # skip last 1 month in momentum (avoids reversal)
 REGIME_DMA      = 200   # moving average for market regime filter
-DMA_EXIT        = 100   # exit stock if price drops below this DMA
+DMA_EXIT        = 250   # exit stock if price drops below this DMA
 
 # ─────────────────────────────────────────────
 # UNIVERSE FILTERS
