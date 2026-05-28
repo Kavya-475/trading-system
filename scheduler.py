@@ -13,6 +13,12 @@ def run_pipeline():
         log.info("Weekend — skipping")
         return
 
+    # Pull latest code from GitHub before running
+    import subprocess
+    pull = subprocess.run(["git", "pull", "origin", "main"],
+                         capture_output=True, text=True)
+    log.info(f"Git pull: {pull.stdout.strip() or pull.stderr.strip()}")
+
     # Step 1: Kite login
     try:
         import asyncio
