@@ -500,6 +500,10 @@ def run_signals(current_holdings: list = []) -> dict:
     Full signal pipeline using cached data.
     No Yahoo Finance fetch — reads from disk only.
     """
+    if getattr(cfg, 'TRADING_HALTED', False):
+        print("TRADING_HALTED — signals suppressed")
+        return {'regime': 'HALTED', 'portfolio': pd.DataFrame(), 'exits': [], 'strength': 0.0}
+
     # Load from cache
     close, volume = load_for_signals()
     nifty500, nifty50, nifty100, nifty_mid = load_index_data()
@@ -509,7 +513,6 @@ def run_signals(current_holdings: list = []) -> dict:
     if cfg.REGIME_WEIGHTED:
         strength = regime_strength(nifty500, nifty100, nifty_mid)
         regime   = 'RISK-ON' if strength > 0 else 'RISK-OFF'
-        print(f'  Deploy fraction  : {strength*100:.0f}%')
     else:
         regime = get_regime(nifty500)
 

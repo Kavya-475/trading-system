@@ -43,7 +43,6 @@ TELEGRAM_CHAT_ID  = os.getenv("TELEGRAM_CHAT_ID",   "")
 PAPER_MODE = True   # flip to False only after full testing
 
 # ── Settings ────────────────────────────────────────────────────────────────
-LIMIT_BUFFER   = 0.005
 CAPITAL        = float(os.getenv("TRADING_CAPITAL", "100000"))
 HOLDINGS_FILE  = "current_holdings.json"
 LOG_FILE       = "orders.log"
@@ -179,7 +178,7 @@ def load_holdings() -> dict:
         migrated = {}
         for ticker, val in raw.items():
             if isinstance(val, (int, float)):
-                migrated[ticker] = {"shares": int(val), "avg_price": 0.0, "entry_date": "unknown"}
+                migrated[ticker] = {"shares": int(val), "avg_price": 0.0, "entry_date": "unknown", "migrated": True}
             else:
                 migrated[ticker] = val
         return migrated
@@ -236,27 +235,34 @@ def build_pnl_summary(holdings: dict, prices: dict) -> str:
         avg_price = get_avg_price(holdings, ticker)
         if shares <= 0:
             continue
-        cur       = prices.get(ticker, 0.0)
-        cost      = shares * avg_price
-        value     = shares * cur
-        pnl       = value - cost
-        pnl_pct   = (pnl / cost * 100) if cost > 0 else 0.0
-        total_cost  += cost
+        cur   = prices.get(ticker, 0.0)
+        value = shares * cur
         total_value += value
-        sign = "+" if pnl >= 0 else "-"
-        lines.append(
-            sign + " " + ticker.ljust(12) + " x" + str(shares).ljust(4) +
-            " @ " + f"{cur:>8.1f}" +
-            "  PnL: " + f"{pnl:>+8.0f}" +
-            " (" + f"{pnl_pct:>+.1f}" + "%)"
-        )
+        is_migrated = isinstance(holdings.get(ticker), dict) and holdings[ticker].get("migrated", False)
+        if avg_price == 0.0 or is_migrated:
+            lines.append(
+                "  " + ticker.ljust(12) + " x" + str(shares).ljust(4) +
+                " @ " + f"{cur:>8.1f}" +
+                "  Entry: N/A"
+            )
+        else:
+            cost      = shares * avg_price
+            pnl       = value - cost
+            pnl_pct   = pnl / cost * 100
+            total_cost += cost
+            sign = "+" if pnl >= 0 else "-"
+            lines.append(
+                sign + " " + ticker.ljust(12) + " x" + str(shares).ljust(4) +
+                " @ " + f"{cur:>8.1f}" +
+                "  PnL: " + f"{pnl:>+8.0f}" +
+                " (" + f"{pnl_pct:>+.1f}" + "%)"
+            )
     total_pnl     = total_value - total_cost
     total_pnl_pct = (total_pnl / total_cost * 100) if total_cost > 0 else 0.0
     sep = "-" * 40
     result = chr(10).join(lines)
     result += chr(10) + sep
-    result += chr(10) + "Total PnL: " + f"{total_pnl:>+,.0f}" + " (" + f"{total_pnl_pct:>+.1f}" + "%)"
-    result += chr(10) + "Invested:  " + f"{total_cost:>10,.0f}"
+    result += chr(10) + "Total PnL: " + (f"{total_pnl:>+,.0f} ({total_pnl_pct:>+.1f}%)" if total_cost > 0 else "N/A (migrated positions)")
     result += chr(10) + "Value:     " + f"{total_value:>10,.0f}"
     return result
 
@@ -398,7 +404,7 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
             shares_to_buy = int(buy_value / price)
             # Tiered buffer based on rank — higher rank = higher buffer to ensure fill
             _rank       = list(tickers_to_buy).index(ticker) if ticker in tickers_to_buy else 99
-            _buf        = 0.050 if _rank < 5 else (0.030 if _rank < 12 else 0.020)
+            _buf        = cfg.BUY_BUFFER_TOP5 if _rank < 5 else (cfg.BUY_BUFFER_MID if _rank < 12 else cfg.BUY_BUFFER_REST)
             limit_price = round(price * (1 + _buf), 1)
 
             if shares_to_buy > 0:
@@ -408,7 +414,7 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
                     existing_shares = get_shares(holdings, ticker)
                     new_shares = existing_shares + shares_to_buy
                     old_avg = get_avg_price(holdings, ticker)
-                    new_avg = (old_avg * existing_shares + price * shares_to_buy) / new_shares if existing_shares > 0 and old_avg > 0 else price
+                    new_avg = (old_avg * existing_shares + limit_price * shares_to_buy) / new_shares if existing_shares > 0 and old_avg > 0 else limit_price
                     set_holding(holdings, ticker, new_shares, new_avg)
                     bought_count += 1
             else:
@@ -432,7 +438,9 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
                 if current_value < new_target * 0.95:
                     buy_value     = new_target - current_value
                     shares_to_buy = int(buy_value / price)
-                    limit_price   = round(price * (1 + 0.020), 1)  # 2% buffer for top-ups
+                    _rank_topup   = list(tickers_to_buy).index(ticker) if ticker in list(tickers_to_buy) else 99
+                    _buf_topup    = cfg.BUY_BUFFER_TOP5 if _rank_topup < 5 else (cfg.BUY_BUFFER_MID if _rank_topup < 12 else cfg.BUY_BUFFER_REST)
+                    limit_price   = round(price * (1 + _buf_topup), 1)
                     if shares_to_buy > 0:
                         res = place_buy_order(kite, ticker, shares_to_buy, limit_price)
                         buy_lines.append(f"BUY {ticker} ×{shares_to_buy} @ ₹{limit_price} [top-up]")
@@ -440,7 +448,7 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
                             existing_shares = get_shares(holdings, ticker)
                             new_shares = existing_shares + shares_to_buy
                             old_avg = get_avg_price(holdings, ticker)
-                            new_avg = (old_avg * existing_shares + price * shares_to_buy) / new_shares if existing_shares > 0 and old_avg > 0 else price
+                            new_avg = (old_avg * existing_shares + limit_price * shares_to_buy) / new_shares if existing_shares > 0 and old_avg > 0 else limit_price
                             set_holding(holdings, ticker, new_shares, new_avg)
 
     return buy_lines
@@ -450,6 +458,10 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
 # MAIN EXECUTION FLOW
 # ─────────────────────────────────────────────
 def run_execution():
+    if cfg.TRADING_HALTED:
+        log.info("TRADING_HALTED flag set — aborting run")
+        return
+
     log.info("=" * 55)
     log.info(f"EXECUTION RUN — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     log.info(f"MODE          : {'PAPER' if PAPER_MODE else '⚠️  LIVE'}")
@@ -492,7 +504,7 @@ def run_execution():
             shares = holdings.get(ticker, 0)
             if shares > 0:
                 price      = latest_prices.get(ticker, 0)
-                sell_price = round(price * 0.99, 1)
+                sell_price = round(price * (1 - cfg.SELL_BUFFER), 1)
                 res        = place_sell_order(kite, ticker, shares, sell_price)
                 sell_lines.append(f"SELL {ticker} ×{shares} @ ₹{sell_price}")
                 if res["status"] in ("paper", "placed"):
@@ -524,7 +536,7 @@ def run_execution():
             shares = holdings.get(ticker, 0)
             if shares > 0:
                 price      = latest_prices.get(ticker, 0)
-                sell_price = round(price * 0.99, 1)
+                sell_price = round(price * (1 - cfg.SELL_BUFFER), 1)
                 res        = place_sell_order(kite, ticker, shares, sell_price)
                 sell_lines.append(f"SELL {ticker} ×{shares} @ ₹{sell_price}")
                 if res["status"] in ("paper", "placed"):
@@ -564,7 +576,7 @@ def run_execution():
             shares = holdings.get(ticker, 0)
             if shares > 0:
                 price      = latest_prices.get(ticker, 0)
-                sell_price = round(price * 0.99, 1)
+                sell_price = round(price * (1 - cfg.SELL_BUFFER), 1)
                 res        = place_sell_order(kite, ticker, shares, sell_price)
                 sell_lines.append(f"SELL {ticker} ×{shares} @ ₹{sell_price} [rotation]")
                 if res["status"] in ("paper", "placed"):

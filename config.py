@@ -48,18 +48,23 @@ MIN_AVG_VALUE_CR    = 20     # crore — minimum 60-day avg traded value
 # Stamp duty   : 0.015% on buy side
 # Effective round-trip cost ≈ 0.17%
 # CORRECT
-STT_BUY  = 0.001      # 0.1% on buy side
+STT_BUY  = 0.0        # STT not applicable on buy side for CNC delivery
 STT_SELL = 0.001      # 0.1% on sell side
 EXCHANGE_CHARGE = 0.0000325
 SEBI_CHARGE     = 0.000001
 STAMP_DUTY      = 0.00015
 
 # ─────────────────────────────────────────────
+# ORDER EXECUTION BUFFERS
+# ─────────────────────────────────────────────
+BUY_BUFFER_TOP5 = 0.050   # limit buffer for top 5 ranked stocks
+BUY_BUFFER_MID  = 0.030   # limit buffer for ranks 6–12
+BUY_BUFFER_REST = 0.020   # limit buffer for remaining stocks
+SELL_BUFFER     = 0.010   # limit discount on sell orders
+
+# ─────────────────────────────────────────────
 # BACKTEST SETTINGS
 # ─────────────────────────────────────────────
-# Change these two lines
-# config.py — change back to original
-# config.py
 START_DATE = "2018-01-01"
 END_DATE   = "2026-05-22"
 INITIAL_CAPITAL = 100000      # ₹1 lakh (results scale %-wise regardless)
@@ -69,7 +74,6 @@ RISK_FREE_RATE  = 0.065       # 6.5% — India 10yr G-Sec
 # DATA
 # ─────────────────────────────────────────────
 DATA_FETCH_START = "2018-01-01"   # extra buffer for DMA calculations
-DATA_FETCH_END   = "2025-01-01"
 DATA_CACHE_FILE  = "price_data_cache.csv"
 VOLUME_CACHE     = "volume_data_cache.csv"
 OPEN_CACHE       = "open_data_cache.csv"
@@ -79,7 +83,8 @@ REGIME_TICKER    = "^CRSLDX"      # Nifty 500
 # ─────────────────────────────────────────────
 # PAPER TESTING FLAGS
 # ─────────────────────────────────────────────
-FORCE_RISK_ON = True  # Set False before going live
+FORCE_RISK_ON   = True   # Set False before going live
+TRADING_HALTED  = False  # Safety kill switch — set True to suspend all trading
 
 # ─────────────────────────────────────────────
 # WEIGHTED REGIME SETTINGS

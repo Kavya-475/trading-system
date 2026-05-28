@@ -1,7 +1,8 @@
-import os, logging
+import os, logging, subprocess
 from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
+import config as cfg
 
 logging.basicConfig(filename="scheduler.log", level=logging.INFO,
     format="%(asctime)s | %(message)s")
@@ -13,11 +14,20 @@ def run_pipeline():
         log.info("Weekend — skipping")
         return
 
+    if cfg.TRADING_HALTED:
+        log.info("TRADING_HALTED flag set — skipping")
+        return
+
     # Pull latest code from GitHub before running
-    import subprocess
-    pull = subprocess.run(["git", "pull", "origin", "main"],
-                         capture_output=True, text=True)
-    log.info(f"Git pull: {pull.stdout.strip() or pull.stderr.strip()}")
+    try:
+        result = subprocess.run(
+            ["git", "pull", "origin", "main"],
+            capture_output=True, text=True,
+            cwd=os.path.dirname(os.path.abspath(__file__))
+        )
+        log.info(f"git pull: {(result.stdout or result.stderr).strip()}")
+    except Exception as e:
+        log.warning(f"git pull failed: {e}")
 
     # Step 1: Kite login
     try:

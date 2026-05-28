@@ -318,7 +318,6 @@ UNIVERSE = {
 def txn_cost(value, side):
     cost = value * (cfg.EXCHANGE_CHARGE + cfg.SEBI_CHARGE)
     cost += value * cfg.STAMP_DUTY  if side == "buy"  else 0
-    cost += value * cfg.STT_SELL    if side == "buy"  else 0   # STT on both sides for CNC
     cost += value * cfg.STT_SELL    if side == "sell" else 0
     cost += 15.93                   if side == "sell" else 0   # DP charge flat per sell
     return cost
