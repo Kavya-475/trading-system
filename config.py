@@ -10,33 +10,54 @@ AGGRESSIVE configuration selected on 2026-05-23.
 # ─────────────────────────────────────────────
 # PORTFOLIO CONSTRUCTION
 # ─────────────────────────────────────────────
-TOP_N            = 12
+# results are slightly changing 
+TOP_N            = 10
 MAX_PER_SECTOR   = 3
-EXIT_RANK_CUTOFF  = 25     # sell if rank drops below this (was 20)
+# barely changing 
+EXIT_RANK_CUTOFF = 40     # sell if rank drops below this (was 20)
 
 # ─────────────────────────────────────────────
 # SIGNAL WEIGHTS  (must sum to 1.0 for long legs)
 # ─────────────────────────────────────────────
+
+# results are heavily changing
 W_MOM_12M   = 0.40    # 12-month momentum weight
 W_MOM_6M    = 0.35    # 6-month momentum weight
 W_MOM_3M    = 0.15    # 3-month momentum weight  ← NEW
+# quite interesting removing it kept cagr same but reduced dd by 10% -> good
+# needs optimzation 
 W_VOL       = -0.10   # volatility penalty (negative = penalise)
 
 # ─────────────────────────────────────────────
 # LOOKBACK PERIODS (trading days)
 # ─────────────────────────────────────────────
+# changing drastically 
 LOOKBACK_12M    = 252   # ~12 months
 LOOKBACK_6M     = 126   # ~6 months
 LOOKBACK_3M     = 63    # ~3 months  ← NEW
+# INTERESTING , changing it single handedly reduces dd by 12%(when kept 0 --> dd=57) needs optimization
 SKIP_RECENT     = 20    # skip last 1 month in momentum (avoids reversal)
+
+# mostly the results are remaining same for these 
+# 
 REGIME_DMA      = 200   # moving average for market regime filter
 DMA_EXIT        = 250   # exit stock if price drops below this DMA
 
 # ─────────────────────────────────────────────
 # UNIVERSE FILTERS
 # ─────────────────────────────────────────────
-MIN_PRICE           = 100    # ₹ minimum stock price
-MIN_AVG_VALUE_CR    = 20     # crore — minimum 60-day avg traded value
+# results are changing too much 
+MIN_PRICE           = 0    # ₹ minimum stock price
+MIN_AVG_VALUE_CR    = 0    # crore — minimum 60-day avg traded value
+
+# ─────────────────────────────────────────────
+# CAPITAL GAINS TAX (India equity — CNC delivery)
+# ─────────────────────────────────────────────
+# Budget 2024 (effective 2024-07-23): STCG 15%→20%, LTCG 10%→12.5%
+STCG_RATE_PRE  = 0.15    # < 1 year hold, before 2024-07-23
+STCG_RATE_POST = 0.20    # < 1 year hold, from 2024-07-23
+LTCG_RATE_PRE  = 0.10    # >= 1 year hold, before 2024-07-23 (ignoring ₹1L exemption)
+LTCG_RATE_POST = 0.125   # >= 1 year hold, from 2024-07-23 (ignoring ₹1.25L exemption)
 
 # ─────────────────────────────────────────────
 # TRANSACTION COSTS (CNC Delivery — Zerodha)
@@ -65,7 +86,7 @@ SELL_BUFFER     = 0.010   # limit discount on sell orders
 # ─────────────────────────────────────────────
 # BACKTEST SETTINGS
 # ─────────────────────────────────────────────
-START_DATE = "2018-01-01"
+START_DATE = "2008-01-01"
 END_DATE   = "2026-05-22"
 INITIAL_CAPITAL = 100000      # ₹1 lakh (results scale %-wise regardless)
 RISK_FREE_RATE  = 0.065       # 6.5% — India 10yr G-Sec
@@ -73,7 +94,8 @@ RISK_FREE_RATE  = 0.065       # 6.5% — India 10yr G-Sec
 # ─────────────────────────────────────────────
 # DATA
 # ─────────────────────────────────────────────
-DATA_FETCH_START = "2018-01-01"   # extra buffer for DMA calculations
+DATA_FETCH_START = "2007-01-01"   # 1yr warmup buffer before START_DATE
+DATA_FETCH_END   = "2026-05-28"   # must match or exceed END_DATE
 DATA_CACHE_FILE  = "price_data_cache.csv"
 VOLUME_CACHE     = "volume_data_cache.csv"
 OPEN_CACHE       = "open_data_cache.csv"

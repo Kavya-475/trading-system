@@ -322,6 +322,19 @@ def txn_cost(value, side):
     cost += 15.93                   if side == "sell" else 0   # DP charge flat per sell
     return cost
 
+_TAX_CHANGE = pd.Timestamp("2024-07-23")
+
+def capital_gains_tax(gain, entry_date, sell_date):
+    """Return STCG or LTCG tax on a realised gain. Returns 0 for losses."""
+    if gain <= 0:
+        return 0.0
+    days_held = (pd.Timestamp(sell_date) - pd.Timestamp(entry_date)).days
+    if pd.Timestamp(sell_date) >= _TAX_CHANGE:
+        stcg, ltcg = cfg.STCG_RATE_POST, cfg.LTCG_RATE_POST
+    else:
+        stcg, ltcg = cfg.STCG_RATE_PRE, cfg.LTCG_RATE_PRE
+    return gain * (ltcg if days_held >= 365 else stcg)
+
 
 # ── Data loading ───────────────────────────────────────────────────────────
 def load_data():
@@ -342,19 +355,32 @@ def load_data():
                           end=cfg.DATA_FETCH_END, auto_adjust=True, progress=True)
     close   = raw["Close"].copy()
     volume  = raw["Volume"].copy()
-    close.columns  = [c.replace(".NS","") for c in close.columns]
-    volume.columns = [c.replace(".NS","") for c in volume.columns]
+    open_prices = raw["Open"].copy()
+    close.columns       = [c.replace(".NS","") for c in close.columns]
+    volume.columns      = [c.replace(".NS","") for c in volume.columns]
+    open_prices.columns = [c.replace(".NS","") for c in open_prices.columns]
     close.to_csv(cfg.DATA_CACHE_FILE)
     volume.to_csv(cfg.VOLUME_CACHE)
+    open_prices.to_csv(cfg.OPEN_CACHE)
 
     r500 = yf.download(cfg.REGIME_TICKER,    start=cfg.DATA_FETCH_START,
                        end=cfg.DATA_FETCH_END, auto_adjust=True, progress=False)
     r50  = yf.download(cfg.BENCHMARK_TICKER, start=cfg.DATA_FETCH_START,
                        end=cfg.DATA_FETCH_END, auto_adjust=True, progress=False)
-    rd   = pd.DataFrame({"nifty500": r500["Close"].squeeze(),
-                         "nifty50":  r50["Close"].squeeze()})
+    r100 = yf.download("^CNX100",            start=cfg.DATA_FETCH_START,
+                       end=cfg.DATA_FETCH_END, auto_adjust=True, progress=False)
+    rmid = yf.download("^CNXMID",            start=cfg.DATA_FETCH_START,
+                       end=cfg.DATA_FETCH_END, auto_adjust=True, progress=False)
+    rd   = pd.DataFrame({
+        "nifty500":    r500["Close"].squeeze(),
+        "nifty50":     r50["Close"].squeeze(),
+        "nifty100":    r100["Close"].squeeze() if not r100.empty else r500["Close"].squeeze(),
+        "nifty_midcap":rmid["Close"].squeeze() if not rmid.empty else r500["Close"].squeeze(),
+    })
     rd.to_csv(cfg.REGIME_CACHE)
-    return close, volume, rd["nifty500"], rd["nifty50"]
+    nifty100  = rd["nifty100"]
+    nifty_mid = rd["nifty_midcap"]
+    return close, volume, rd["nifty500"], rd["nifty50"], nifty100, nifty_mid, open_prices
 
 
 # ── Signal helpers ─────────────────────────────────────────────────────────
@@ -574,6 +600,7 @@ def run_backtest():
 
     cash        = float(cfg.INITIAL_CAPITAL)
     holdings    = {}
+    entry_info  = {}   # ticker → {"avg_price": float, "entry_date": Timestamp}
     eq_curve    = []
     trade_log   = []
     tickers     = list(UNIVERSE.keys())
@@ -601,16 +628,20 @@ def run_backtest():
         is_rebalance = (cur_month != last_rebalance_month)
 
         # ── REGIME CHECK (daily) ────────────────────────────────────────────
-        nifty500_regime = get_regime(nifty500, day)
-        if nifty500_regime == "RISK-ON":
+        if cfg.FORCE_RISK_ON:
             strength = 1.0
             regime   = "RISK-ON"
-        elif cfg.REGIME_WEIGHTED:
-            strength = get_regime_strength(nifty500, nifty100, nifty_mid, day)
-            regime   = "RISK-ON" if strength > 0 else "RISK-OFF"
         else:
-            strength = 0.0
-            regime   = "RISK-OFF"
+            nifty500_regime = get_regime(nifty500, day)
+            if nifty500_regime == "RISK-ON":
+                strength = 1.0
+                regime   = "RISK-ON"
+            elif cfg.REGIME_WEIGHTED:
+                strength = get_regime_strength(nifty500, nifty100, nifty_mid, day)
+                regime   = "RISK-ON" if strength > 0 else "RISK-OFF"
+            else:
+                strength = 0.0
+                regime   = "RISK-OFF"
 
         # ── RISK-OFF: liquidate everything ──────────────────────────────────
         if regime == "RISK-OFF":
@@ -625,10 +656,14 @@ def run_backtest():
                             fill_px  = fill_px if fill_px else open_px if open_px > 0 else px
                             proceeds = sh * fill_px
                             cost     = txn_cost(proceeds, "sell")
-                            cash    += proceeds - cost
+                            info     = entry_info.get(t, {})
+                            gain     = (fill_px - info.get("avg_price", fill_px)) * sh
+                            tax      = capital_gains_tax(gain, info.get("entry_date", day), day)
+                            cash    += proceeds - cost - tax
+                            entry_info.pop(t, None)
                             trade_log.append({
                                 "date":date_str,"ticker":t,"action":"SELL(RISK-OFF)",
-                                "shares":sh,"price":fill_px,"value":proceeds,"cost":cost
+                                "shares":sh,"price":fill_px,"value":proceeds,"cost":cost,"tax":tax
                             })
                 holdings     = {}
                 in_risk_off  = True
@@ -685,10 +720,14 @@ def run_backtest():
                     fill_px  = fill_px if fill_px else open_px if open_px > 0 else px
                     proceeds = sh * fill_px
                     cost     = txn_cost(proceeds, "sell")
-                    cash    += proceeds - cost
+                    info     = entry_info.get(t, {})
+                    gain     = (fill_px - info.get("avg_price", fill_px)) * sh
+                    tax      = capital_gains_tax(gain, info.get("entry_date", day), day)
+                    cash    += proceeds - cost - tax
+                    entry_info.pop(t, None)
                     trade_log.append({
                         "date":date_str,"ticker":t,"action":f"SELL({reason})",
-                        "shares":sh,"price":fill_px,"value":proceeds,"cost":cost
+                        "shares":sh,"price":fill_px,"value":proceeds,"cost":cost,"tax":tax
                     })
                     holdings[t] = 0
 
@@ -722,7 +761,15 @@ def run_backtest():
                     tc   = txn_cost(cost, "buy")
                     if n > 0 and cash >= cost + tc:
                         cash -= (cost + tc)
-                        holdings[t] = holdings.get(t, 0) + n
+                        old_sh  = holdings.get(t, 0)
+                        new_sh  = old_sh + n
+                        old_avg = entry_info.get(t, {}).get("avg_price", fill_px)
+                        new_avg = (old_sh * old_avg + n * fill_px) / new_sh
+                        entry_info[t] = {
+                            "avg_price":  new_avg,
+                            "entry_date": entry_info.get(t, {}).get("entry_date", day),
+                        }
+                        holdings[t] = new_sh
                         bought += 1
                         trade_log.append({
                             "date":date_str,"ticker":t,"action":"BUY(replacement)",
@@ -743,10 +790,14 @@ def run_backtest():
                     if px > 0:
                         proceeds = sh * px
                         cost     = txn_cost(proceeds, "sell")
-                        cash    += proceeds - cost
+                        info     = entry_info.get(t, {})
+                        gain     = (px - info.get("avg_price", px)) * sh
+                        tax      = capital_gains_tax(gain, info.get("entry_date", day), day)
+                        cash    += proceeds - cost - tax
+                        entry_info.pop(t, None)
                         trade_log.append({
                             "date":date_str,"ticker":t,"action":"SELL(rotation)",
-                            "shares":sh,"price":px,"value":proceeds,"cost":cost
+                            "shares":sh,"price":px,"value":proceeds,"cost":cost,"tax":tax
                         })
                         holdings[t] = 0
 
@@ -782,7 +833,15 @@ def run_backtest():
                     tc   = txn_cost(cost, "buy")
                     if n > 0 and cash >= cost + tc:
                         cash -= (cost + tc)
-                        holdings[t] = holdings.get(t, 0) + n
+                        old_sh  = holdings.get(t, 0)
+                        new_sh  = old_sh + n
+                        old_avg = entry_info.get(t, {}).get("avg_price", fill_px)
+                        new_avg = (old_sh * old_avg + n * fill_px) / new_sh
+                        entry_info[t] = {
+                            "avg_price":  new_avg,
+                            "entry_date": entry_info.get(t, {}).get("entry_date", day),
+                        }
+                        holdings[t] = new_sh
                         bought += 1
                         trade_log.append({
                             "date":date_str,"ticker":t,"action":"BUY",
