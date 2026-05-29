@@ -471,14 +471,14 @@ def _update_index_cache(start: str, end: str):
             new_idx = pd.DataFrame({
                 "nifty500": r500["Close"].squeeze(),
                 "nifty50" : r50["Close"].squeeze(),
-            })
+            }, index=r500.index)
             updated_idx = pd.concat([existing_idx, new_idx])
             updated_idx = updated_idx[~updated_idx.index.duplicated(keep="last")]
         else:
             updated_idx = pd.DataFrame({
                 "nifty500": r500["Close"].squeeze(),
                 "nifty50" : r50["Close"].squeeze(),
-            })
+            }, index=r500.index)
 
         updated_idx.to_csv(cfg.REGIME_CACHE)
         print(f"Index cache updated → last date: {updated_idx.index[-1].date()}")

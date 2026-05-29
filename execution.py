@@ -268,11 +268,7 @@ def build_pnl_summary(holdings: dict, prices: dict) -> str:
 
 def get_portfolio_value(kite, holdings: dict, prices: dict) -> float:
     if PAPER_MODE:
-        stock_value = sum(
-            get_shares(holdings, ticker) * prices.get(ticker, 0)
-            for ticker in holdings if get_shares(holdings, ticker) > 0
-        )
-        return CAPITAL + stock_value
+        return CAPITAL
     try:
         margins     = kite.margins(segment="equity")
         cash        = margins["net"]
@@ -380,6 +376,19 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
     target           = capital_deployed / stocks_to_hold
     log.info(f"Regime strength: {strength*100:.0f}% | Deploying {stocks_to_hold} positions @ {target:,.0f} each")
 
+    # Build rank→buffer map once — reused identically in both passes
+    buf_map = {}
+    for i, t in enumerate(tickers_to_buy):
+        if i < 5:
+            buf_map[t] = cfg.BUY_BUFFER_TOP5
+        elif i < 12:
+            buf_map[t] = cfg.BUY_BUFFER_MID
+        else:
+            buf_map[t] = cfg.BUY_BUFFER_REST
+
+    def _limit(ticker, close_price):
+        return round(close_price * (1 + buf_map.get(ticker, cfg.BUY_BUFFER_REST)), 1)
+
     bought_count = 0
     for ticker in tickers_to_buy:
         if bought_count >= stocks_to_hold:
@@ -390,8 +399,6 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
             log.warning(f"No price for {ticker} — skipping")
             continue
 
-        # Skip if even 1 share costs more than target allocation
-        # Take next ranked stock instead
         if price > target:
             log.info(f"Skipping {ticker} @ ₹{price:,.0f} — too expensive for ₹{target:,.0f} allocation")
             continue
@@ -402,10 +409,7 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
         if current_value < target * 0.95:
             buy_value     = target - current_value
             shares_to_buy = int(buy_value / price)
-            # Tiered buffer based on rank — higher rank = higher buffer to ensure fill
-            _rank       = list(tickers_to_buy).index(ticker) if ticker in tickers_to_buy else 99
-            _buf        = cfg.BUY_BUFFER_TOP5 if _rank < 5 else (cfg.BUY_BUFFER_MID if _rank < 12 else cfg.BUY_BUFFER_REST)
-            limit_price = round(price * (1 + _buf), 1)
+            limit_price   = _limit(ticker, price)
 
             if shares_to_buy > 0:
                 res = place_buy_order(kite, ticker, shares_to_buy, limit_price)
@@ -420,17 +424,16 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
             else:
                 log.info(f"Skipping {ticker} @ ₹{price:,.0f} — insufficient allocation for 1 share")
 
-    # ── Second pass: redistribute unused cash ─────────────────────────────
-    # After initial buys, recalculate target using remaining cash
-    # and top up underweight positions
+    # ── Second pass: top up underweight positions from this buy list only ────
+    # Uses the same buf_map — limit prices are identical to the first pass.
     if bought_count > 0:
-        held = [t for t in holdings if get_shares(holdings, t) > 0]
-        current_val = sum(get_shares(holdings, t) * prices.get(t, 0) for t in held)
-        remaining_cash = capital_deployed - current_val
-        if remaining_cash > 500 and held:
-            new_target = (current_val + remaining_cash) / len(held)
-            log.info(f"Redistributing ₹{remaining_cash:,.0f} unused cash across {len(held)} positions")
-            for ticker in held:
+        in_scope      = [t for t in tickers_to_buy if get_shares(holdings, t) > 0]
+        scope_val     = sum(get_shares(holdings, t) * prices.get(t, 0) for t in in_scope)
+        remaining_cash = capital_deployed - scope_val
+        if remaining_cash > 500 and in_scope:
+            new_target = (scope_val + remaining_cash) / len(in_scope)
+            log.info(f"Redistributing ₹{remaining_cash:,.0f} unused cash across {len(in_scope)} in-scope positions")
+            for ticker in in_scope:
                 price = prices.get(ticker, 0)
                 if price <= 0 or price > new_target:
                     continue
@@ -438,9 +441,7 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
                 if current_value < new_target * 0.95:
                     buy_value     = new_target - current_value
                     shares_to_buy = int(buy_value / price)
-                    _rank_topup   = list(tickers_to_buy).index(ticker) if ticker in list(tickers_to_buy) else 99
-                    _buf_topup    = cfg.BUY_BUFFER_TOP5 if _rank_topup < 5 else (cfg.BUY_BUFFER_MID if _rank_topup < 12 else cfg.BUY_BUFFER_REST)
-                    limit_price   = round(price * (1 + _buf_topup), 1)
+                    limit_price   = _limit(ticker, price)
                     if shares_to_buy > 0:
                         res = place_buy_order(kite, ticker, shares_to_buy, limit_price)
                         buy_lines.append(f"BUY {ticker} ×{shares_to_buy} @ ₹{limit_price} [top-up]")
@@ -501,7 +502,7 @@ def run_execution():
         log.info("RISK-OFF — liquidating all positions immediately")
         sell_lines = []
         for ticker in current_tickers:
-            shares = holdings.get(ticker, 0)
+            shares = get_shares(holdings, ticker)
             if shares > 0:
                 price      = latest_prices.get(ticker, 0)
                 sell_price = round(price * (1 - cfg.SELL_BUFFER), 1)
@@ -533,7 +534,7 @@ def run_execution():
     if exits:
         log.info(f"Exit signals: {exits}")
         for ticker in exits:
-            shares = holdings.get(ticker, 0)
+            shares = get_shares(holdings, ticker)
             if shares > 0:
                 price      = latest_prices.get(ticker, 0)
                 sell_price = round(price * (1 - cfg.SELL_BUFFER), 1)
@@ -573,7 +574,7 @@ def run_execution():
 
         # Sell rotation exits
         for ticker in rotate_out:
-            shares = holdings.get(ticker, 0)
+            shares = get_shares(holdings, ticker)
             if shares > 0:
                 price      = latest_prices.get(ticker, 0)
                 sell_price = round(price * (1 - cfg.SELL_BUFFER), 1)
