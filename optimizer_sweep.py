@@ -1047,6 +1047,11 @@ def main():
 
             if metrics is None or (isinstance(metrics, dict) and "error" in metrics):
                 errors += 1
+                if errors <= 5:
+                    if metrics is None:
+                        print(f"  [Error #{errors}] Backtest returned None (typically means date range {BACKTEST_START} to {BACKTEST_END} has no data in current cache)")
+                    else:
+                        print(f"  [Error #{errors}] Exception: {metrics['error']}")
                 continue
 
             row = {**params, **metrics}
