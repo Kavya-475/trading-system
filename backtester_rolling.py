@@ -49,9 +49,15 @@ SKIP         = cfg.SKIP_RECENT      # 25
 INITIAL_CAP  = float(cfg.INITIAL_CAPITAL)
 RF_ANNUAL    = cfg.RISK_FREE_RATE
 
-# Transaction costs
+# Transaction costs (one-way)
 TXN_BUY  = cfg.STAMP_DUTY + cfg.EXCHANGE_CHARGE + cfg.SEBI_CHARGE
 TXN_SELL = cfg.STT_SELL   + cfg.EXCHANGE_CHARGE + cfg.SEBI_CHARGE
+
+# Limit-order buffers (tiered by rank in full universe)
+BUY_BUF_TOP5 = cfg.BUY_BUFFER_TOP5   # 5% — ranks 0-4
+BUY_BUF_MID  = cfg.BUY_BUFFER_MID    # 3% — ranks 5-11
+BUY_BUF_REST = cfg.BUY_BUFFER_REST   # 2% — rank 12+
+SELL_BUF     = cfg.SELL_BUFFER        # 1% discount on sell limit
 
 # Capital gains tax cutoff date (Budget 2024)
 TAX_CUTOFF_ORD = pd.Timestamp("2024-07-23").toordinal()
@@ -66,19 +72,23 @@ OUT_TEXT  = "rolling_summary.txt"
 # WORKER GLOBALS
 # ─────────────────────────────────────────────
 _close_arr  = None
+_open_arr   = None   # next-day open prices for realistic fills
 _score_mat  = None
 _above_dma  = None
 _regime_on  = None
 _month_arr  = None
-_date_ord   = None   # ordinal date per day (for tax calc)
+_date_ord   = None
 _sec_idx    = None
 _n_stocks   = None
+_has_open   = False  # whether open price cache is available
 
 
 def _init(shared):
-    global _close_arr, _score_mat, _above_dma, _regime_on
-    global _month_arr, _date_ord, _sec_idx, _n_stocks
+    global _close_arr, _open_arr, _score_mat, _above_dma, _regime_on
+    global _month_arr, _date_ord, _sec_idx, _n_stocks, _has_open
     _close_arr = shared["close_arr"]
+    _open_arr  = shared["open_arr"]
+    _has_open  = shared["has_open"]
     _score_mat = shared["score_mat"]
     _above_dma = shared["above_dma"]
     _regime_on = shared["regime_on"]
@@ -108,6 +118,23 @@ def load_data():
     N        = len(dates)
 
     close_arr = close_df.values.astype(np.float32)
+
+    # ── Open prices (for realistic next-day fill simulation) ──────
+    has_open = False
+    open_arr = np.zeros_like(close_arr)   # fallback: zeros → use limit price
+    if os.path.exists(cfg.OPEN_CACHE):
+        try:
+            open_df  = pd.read_csv(cfg.OPEN_CACHE, index_col=0,
+                                   parse_dates=True).sort_index()
+            open_df  = open_df.reindex(columns=tickers).reindex(dates).ffill()
+            open_arr = open_df.values.astype(np.float32)
+            has_open = True
+            print("  Open price cache loaded — using next-day open fills.", flush=True)
+        except Exception as e:
+            print(f"  Open cache error ({e}) — using limit-price approximation.", flush=True)
+    else:
+        print("  Open cache missing — run data_manager.py first for exact fills.", flush=True)
+        print("  Falling back to limit-price approximation (close × buffer).", flush=True)
 
     # ── Score matrix (precomputed once) ──────────────────────────
     print("  Precomputing score matrix...", flush=True)
@@ -164,6 +191,8 @@ def load_data():
 
     return {
         "close_arr": close_arr,
+        "open_arr":  open_arr,
+        "has_open":  has_open,
         "score_mat": score_mat,
         "above_dma": above_dma,
         "regime_on": regime_on,
@@ -221,32 +250,84 @@ def run_window(params: dict):
     if T < 20:
         return None
 
+    N_all      = _close_arr.shape[0]
     cash       = INITIAL_CAP
     shares     = np.zeros(S, dtype=np.float64)
     avg_px     = np.zeros(S, dtype=np.float64)
-    entry_ord  = np.zeros(S, dtype=np.int32)   # ordinal date of entry
+    entry_ord  = np.zeros(S, dtype=np.int32)
     eq_curve   = np.empty(T, dtype=np.float64)
     trades     = 0
     last_month = -1
     in_roff    = False
 
     for ti in range(T):
-        di     = day_idx[ti]
-        prices = _close_arr[di].astype(np.float64)
-        scores = _score_mat[di].copy()
-        d_ord  = int(_date_ord[di])
+        di      = day_idx[ti]
+        prices  = _close_arr[di].astype(np.float64)   # today's close
+        scores  = _score_mat[di].copy()
+        d_ord   = int(_date_ord[di])
+        next_di = di + 1 if di + 1 < N_all else di    # next trading day
+
+        # Next-day open prices for fills
+        if _has_open:
+            opens = _open_arr[next_di].astype(np.float64)
+        else:
+            opens = None   # will use limit-price fallback
 
         px_safe  = np.where(prices > 0, prices, 0.0)
         port_val = cash + float(np.dot(shares, px_safe))
+
+        # ── Helper: sell fill price ───────────────────────────────
+        def sell_fill(close_px, open_px):
+            """
+            Limit sell order placed at close × (1 - SELL_BUF).
+            If open data available: actual fill is at next-day open
+            (which is typically >= limit so sell at open gives a better price,
+            but we conservatively use open × (1 - SELL_BUF)).
+            Fallback: close × (1 - SELL_BUF).
+            """
+            if open_px is not None and open_px > 0:
+                return open_px * (1.0 - SELL_BUF)
+            return close_px * (1.0 - SELL_BUF)
+
+        # ── Helper: buy fill price ────────────────────────────────
+        def buy_fill(close_px, open_px, universe_rank):
+            """
+            Limit buy placed at close × (1 + buf).
+            Fill price = next-day open if open <= limit (order filled at open).
+            If open > limit: gap-up — order missed, return None.
+            Fallback (no open data): use close price as proxy for next-day open.
+            This is slightly optimistic but avoids inflating fills with the buffer.
+            """
+            if universe_rank < 5:
+                buf = BUY_BUF_TOP5
+            elif universe_rank < 12:
+                buf = BUY_BUF_MID
+            else:
+                buf = BUY_BUF_REST
+            limit = close_px * (1.0 + buf)
+            if open_px is not None and open_px > 0:
+                if open_px <= limit:
+                    return open_px   # filled at open (better than limit)
+                return None          # gap-up exceeded limit — missed fill
+            return close_px          # fallback: close ≈ next-day open
+
+        # ── Rank lookup array (universe rank per stock) ───────────
+        rank_order  = np.argsort(-scores)
+        uni_rank    = np.empty(S, dtype=np.int32)
+        uni_rank[rank_order] = np.arange(len(rank_order), dtype=np.int32)
+
+        in_cutoff   = set(rank_order[:EXIT_CUTOFF].tolist())
 
         # ── RISK-OFF ──────────────────────────────────────────────
         if not _regime_on[di]:
             if not in_roff:
                 for i in range(S):
                     if shares[i] > 0 and prices[i] > 0:
-                        proceeds = shares[i] * prices[i]
+                        op       = float(opens[i]) if opens is not None else None
+                        fp       = sell_fill(prices[i], op)
+                        proceeds = shares[i] * fp
                         cost     = proceeds * TXN_SELL
-                        gain     = (prices[i] - avg_px[i]) * shares[i]
+                        gain     = (fp - avg_px[i]) * shares[i]
                         tax      = _cgt(gain, entry_ord[i], d_ord)
                         cash    += proceeds - cost - tax
                         shares[i] = 0.0
@@ -258,10 +339,7 @@ def run_window(params: dict):
 
         in_roff = False
 
-        # ── Rank + portfolio selection ────────────────────────────
-        rank_order = np.argsort(-scores)
-        in_cutoff  = set(rank_order[:EXIT_CUTOFF].tolist())
-
+        # ── Portfolio selection ───────────────────────────────────
         portfolio, sec_count = [], {}
         for i in rank_order:
             if scores[i] <= -9000 or len(portfolio) >= TOP_N:
@@ -277,9 +355,11 @@ def run_window(params: dict):
             if shares[i] <= 0 or prices[i] <= 0:
                 continue
             if (i not in in_cutoff) or (not _above_dma[di, i]):
-                proceeds = shares[i] * prices[i]
+                op       = float(opens[i]) if opens is not None else None
+                fp       = sell_fill(prices[i], op)
+                proceeds = shares[i] * fp
                 cost     = proceeds * TXN_SELL
-                gain     = (prices[i] - avg_px[i]) * shares[i]
+                gain     = (fp - avg_px[i]) * shares[i]
                 tax      = _cgt(gain, entry_ord[i], d_ord)
                 cash    += proceeds - cost - tax
                 shares[i] = 0.0
@@ -290,16 +370,18 @@ def run_window(params: dict):
         if cur_month != last_month:
             for i in range(S):
                 if shares[i] > 0 and i not in portfolio_set and prices[i] > 0:
-                    proceeds = shares[i] * prices[i]
+                    op       = float(opens[i]) if opens is not None else None
+                    fp       = sell_fill(prices[i], op)
+                    proceeds = shares[i] * fp
                     cost     = proceeds * TXN_SELL
-                    gain     = (prices[i] - avg_px[i]) * shares[i]
+                    gain     = (fp - avg_px[i]) * shares[i]
                     tax      = _cgt(gain, entry_ord[i], d_ord)
                     cash    += proceeds - cost - tax
                     shares[i] = 0.0
                     trades   += 1
             last_month = cur_month
 
-        # ── Buy to fill portfolio (greedy until cash exhausted) ───
+        # ── Buy to fill portfolio ─────────────────────────────────
         port_val    = cash + float(np.dot(shares, px_safe))
         target_each = port_val / TOP_N if TOP_N > 0 else 0
 
@@ -309,14 +391,18 @@ def run_window(params: dict):
                 continue
             cur_val = shares[i] * px
             if cur_val < target_each * 0.95:
-                n_buy = int((target_each - cur_val) / px)
+                op   = float(opens[i]) if opens is not None else None
+                fp   = buy_fill(px, op, int(uni_rank[i]))
+                if fp is None:
+                    continue   # gap-up missed the limit order
+                n_buy = int((target_each - cur_val) / fp)
                 if n_buy > 0:
-                    cost = n_buy * px * (1.0 + TXN_BUY)
+                    cost = n_buy * fp * (1.0 + TXN_BUY)
                     if cash >= cost:
                         old_sh    = shares[i]
                         new_sh    = old_sh + n_buy
-                        old_avg   = avg_px[i] if old_sh > 0 else px
-                        avg_px[i] = (old_avg * old_sh + px * n_buy) / new_sh
+                        old_avg   = avg_px[i] if old_sh > 0 else fp
+                        avg_px[i] = (old_avg * old_sh + fp * n_buy) / new_sh
                         if old_sh == 0:
                             entry_ord[i] = d_ord
                         shares[i] = new_sh
