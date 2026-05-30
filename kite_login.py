@@ -127,16 +127,20 @@ async def get_access_token():
     # ── Write the new access_token to .env ───────────────────────────────
     # execution.py reads KITE_ACCESS_TOKEN from .env to authenticate API calls.
     # We update the existing line in place to avoid duplicates.
-    lines = open(".env").readlines() if os.path.exists(".env") else []
+    lines = []
+    if os.path.exists(".env"):
+        with open(".env") as f:
+            lines = f.readlines()
     updated = False
     for i, line in enumerate(lines):
         if line.startswith("KITE_ACCESS_TOKEN="):
-            lines[i] = f"KITE_ACCESS_TOKEN={access_token}\n"   # replace existing token
+            lines[i] = f"KITE_ACCESS_TOKEN={access_token}\n"
             updated = True
             break
     if not updated:
-        lines.append(f"KITE_ACCESS_TOKEN={access_token}\n")     # add if not present
-    open(".env", "w").writelines(lines)
+        lines.append(f"KITE_ACCESS_TOKEN={access_token}\n")
+    with open(".env", "w") as f:
+        f.writelines(lines)
 
     print(f"Login successful. Token: {access_token[:10]}...")
     return access_token

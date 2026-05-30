@@ -770,7 +770,6 @@ def run_backtest():
                             "entry_date": entry_info.get(t, {}).get("entry_date", day),
                         }
                         holdings[t] = new_sh
-                        bought += 1
                         trade_log.append({
                             "date":date_str,"ticker":t,"action":"BUY(replacement)",
                             "shares":n,"price":fill_px,"value":cost,"cost":tc

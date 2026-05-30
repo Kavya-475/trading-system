@@ -25,7 +25,6 @@ import logging
 from datetime import datetime, date
 from dotenv import load_dotenv
 import pandas as pd
-import numpy as np
 
 import config as cfg
 from signals import run_signals, UNIVERSE, compute_scores, apply_liquidity_filter
@@ -311,9 +310,9 @@ def build_pnl_summary(holdings: dict, prices: dict) -> str:
     result += chr(10) + "Value:     " + f"{total_value:>10,.0f}"
     return result
 
-def get_portfolio_value(kite, holdings: dict, prices: dict) -> float:
+def get_portfolio_value(kite) -> float:
     """
-    Returns the total current portfolio value (cash + stock holdings).
+    Returns the total current portfolio value.
     In PAPER_MODE returns the fixed CAPITAL constant (no real account data).
     In live mode, queries Kite for the actual margin balance and open positions.
     Falls back to CAPITAL if the Kite API call fails.
@@ -322,11 +321,11 @@ def get_portfolio_value(kite, holdings: dict, prices: dict) -> float:
         return CAPITAL
     try:
         margins     = kite.margins(segment="equity")
-        cash        = margins["net"]                          # available cash balance
+        cash        = margins["net"]
         positions   = kite.positions()["net"]
         stock_value = sum(
             p["quantity"] * p["last_price"]
-            for p in positions if p["quantity"] > 0           # only count long positions
+            for p in positions if p["quantity"] > 0
         )
         return cash + stock_value
     except Exception as e:
@@ -350,7 +349,6 @@ def place_buy_order(kite, ticker: str, shares: int, limit_price: float) -> dict:
         )
         return {"status": "paper"}
     try:
-        from kiteconnect import KiteConnect
         order_id = kite.place_order(
             variety=kite.VARIETY_REGULAR,
             exchange=kite.EXCHANGE_NSE,
@@ -378,7 +376,6 @@ def place_sell_order(kite, ticker: str, shares: int, limit_price: float) -> dict
         )
         return {"status": "paper"}
     try:
-        from kiteconnect import KiteConnect
         order_id = kite.place_order(
             variety=kite.VARIETY_REGULAR,
             exchange=kite.EXCHANGE_NSE,
@@ -426,7 +423,7 @@ def send_telegram(message: str):
 #   Pass 2 — redistribute any leftover cash across all in-scope positions
 # ─────────────────────────────────────────────
 def execute_buys(kite, tickers_to_buy: list, holdings: dict,
-                 prices: dict, port_value: float, strength: float = 1.0, stocks_to_hold: int = 7) -> list:
+                 prices: dict, port_value: float, strength: float = 1.0, stocks_to_hold: int = None) -> list:
     """
     Places buy orders for the given list of tickers.
     strength: regime strength 0.0-1.0 — scales down capital deployed when < 1.0.
@@ -435,9 +432,11 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
     Avg price in holdings is recorded at the market close price (not limit price)
     because that is the realistic fill price on next-day open.
     """
+    if stocks_to_hold is None:
+        stocks_to_hold = max(1, round(cfg.TOP_N * strength))
     buy_lines        = []
-    capital_deployed = port_value * strength         # scale by regime strength (0–100%)
-    target           = capital_deployed / stocks_to_hold   # equal-weight target per position
+    capital_deployed = port_value * strength
+    target           = capital_deployed / stocks_to_hold
     log.info(f"Regime strength: {strength*100:.0f}% | Deploying {stocks_to_hold} positions @ {target:,.0f} each")
 
     # Assign limit order buffer per ticker based on its rank in tickers_to_buy.
@@ -626,7 +625,7 @@ def run_execution():
         if not scored.empty:
             replacements = find_replacement(scored, current_tickers, exits)
             if replacements:
-                port_value = get_portfolio_value(kite, holdings, latest_prices)
+                port_value = get_portfolio_value(kite)
                 new_lines  = execute_buys(
                     kite, replacements, holdings, latest_prices, port_value, strength
                 )
@@ -640,7 +639,7 @@ def run_execution():
         log.info("Full monthly rebalance — reviewing all positions...")
 
         top_n        = portfolio.index.tolist() if not portfolio.empty else []
-        held_tickers = [t for t, s in holdings.items() if s > 0]
+        held_tickers = [t for t in holdings if get_shares(holdings, t) > 0]
 
         # Find holdings not in current top N that should be rotated out
         rotate_out = []
@@ -662,7 +661,7 @@ def run_execution():
                     set_holding(holdings, ticker, 0)
 
         # Buy full top N (including rotations)
-        port_value    = get_portfolio_value(kite, holdings, latest_prices)
+        port_value    = get_portfolio_value(kite)
         new_lines     = execute_buys(
             kite, top_n, holdings, latest_prices, port_value, strength, stocks_to_hold
         )

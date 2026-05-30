@@ -608,7 +608,7 @@ def run_signals(current_holdings: list = []) -> dict:
 
     if scored.empty:
         print("No stocks passed scoring. Check cache data.")
-        return {"regime": regime, "portfolio": pd.DataFrame(), "exits": []}
+        return {"regime": regime, "portfolio": pd.DataFrame(), "exits": [], "strength": 1.0}
 
     # Select top N portfolio and check which held stocks should exit
     portfolio = select_portfolio(scored)

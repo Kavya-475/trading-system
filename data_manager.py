@@ -281,13 +281,6 @@ UNIVERSE_TICKERS = [
     "ZYDUSLIFE",
 ]
 
-# Maps cache column names to Yahoo Finance tickers for the two indices we track
-INDEX_TICKERS = {
-    "nifty500": cfg.REGIME_TICKER,    # ^CRSLDX — used for regime filter
-    "nifty50" : cfg.BENCHMARK_TICKER, # ^NSEI    — used as performance benchmark
-}
-
-
 # ─────────────────────────────────────────────
 # SAFE COLUMN READER
 # yfinance 2.x changed its DataFrame structure and sometimes returns None
@@ -438,15 +431,16 @@ def update_cache():
         print("No new data returned. Market may have been closed.")
         return
 
-    existing_vol = pd.read_csv(cfg.VOLUME_CACHE, index_col=0, parse_dates=True)
+    existing_vol  = pd.read_csv(cfg.VOLUME_CACHE, index_col=0, parse_dates=True)
+    existing_open = pd.read_csv(cfg.OPEN_CACHE,   index_col=0, parse_dates=True) if os.path.exists(cfg.OPEN_CACHE) else pd.DataFrame()
 
     # Only update columns that already exist in the cache (common between old and new)
     common_cols = existing.columns.intersection(new_close.columns)
     new_cols    = new_close.columns.difference(existing.columns)   # newly listed stocks
 
     # Concatenate old + new rows for each cache
-    updated_close = pd.concat([existing,     new_close[common_cols]])
-    updated_vol   = pd.concat([existing_vol, new_volume[common_cols]])
+    updated_close = pd.concat([existing,      new_close[common_cols]])
+    updated_vol   = pd.concat([existing_vol,  new_volume[common_cols]])
 
     # Remove any duplicate dates that might arise from running twice on the same day
     updated_close = updated_close[~updated_close.index.duplicated(keep="last")]
@@ -459,6 +453,14 @@ def update_cache():
 
     updated_close.to_csv(cfg.DATA_CACHE_FILE)
     updated_vol.to_csv(cfg.VOLUME_CACHE)
+
+    if not existing_open.empty:
+        open_common  = existing_open.columns.intersection(new_open.columns)
+        updated_open = pd.concat([existing_open, new_open[open_common]])
+        updated_open = updated_open[~updated_open.index.duplicated(keep="last")]
+        for col in new_cols:
+            updated_open[col] = new_open.get(col, pd.Series())
+        updated_open.to_csv(cfg.OPEN_CACHE)
 
     print(f"Cache updated: added {len(new_close)} new days")
     print(f"Cache now has: {updated_close.shape[0]} days × {updated_close.shape[1]} stocks")
