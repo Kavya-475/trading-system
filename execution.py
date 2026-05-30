@@ -31,30 +31,34 @@ import config as cfg
 from signals import run_signals, UNIVERSE, compute_scores, apply_liquidity_filter
 from data_manager import load_for_signals
 
-# ── Load secrets ────────────────────────────────────────────────────────────
+# ── Load secrets from .env file ─────────────────────────────────────────────
+# Must be called before any os.getenv() calls so the file values are available
 load_dotenv()
 KITE_API_KEY      = os.getenv("KITE_API_KEY",       "your_api_key_here")
 KITE_API_SECRET   = os.getenv("KITE_API_SECRET",    "your_api_secret_here")
-KITE_ACCESS_TOKEN = os.getenv("KITE_ACCESS_TOKEN",  "")
+KITE_ACCESS_TOKEN = os.getenv("KITE_ACCESS_TOKEN",  "")   # refreshed daily by kite_login.py
 TELEGRAM_TOKEN    = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID  = os.getenv("TELEGRAM_CHAT_ID",   "")
 
-# ── Master switch ───────────────────────────────────────────────────────────
-PAPER_MODE = True   # flip to False only after full testing
+# ── Master switch ────────────────────────────────────────────────────────────
+# PAPER_MODE = True  → logs orders but never calls Kite API (safe for testing)
+# PAPER_MODE = False → places real orders via Kite Connect (only after full testing)
+PAPER_MODE = True
 
-# ── Settings ────────────────────────────────────────────────────────────────
-CAPITAL        = float(os.getenv("TRADING_CAPITAL", "100000"))
-HOLDINGS_FILE  = "current_holdings.json"
-LOG_FILE       = "orders.log"
+# ── Module-level settings ────────────────────────────────────────────────────
+CAPITAL        = float(os.getenv("TRADING_CAPITAL", "100000"))  # total capital to deploy
+HOLDINGS_FILE  = "current_holdings.json"   # persists share counts + avg price across runs
+LOG_FILE       = "orders.log"              # append-only log of every order placed
 
-# ── Logging ─────────────────────────────────────────────────────────────────
+# ── Logging setup ────────────────────────────────────────────────────────────
+# Writes to orders.log AND prints to console simultaneously
 logging.basicConfig(
     filename=LOG_FILE,
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
-console = logging.StreamHandler()
+console = logging.StreamHandler()           # add a second handler for console output
 console.setLevel(logging.INFO)
 logging.getLogger().addHandler(console)
 log = logging.getLogger(__name__)
@@ -65,11 +69,14 @@ log = logging.getLogger(__name__)
 # ─────────────────────────────────────────────
 def is_rebalance_day() -> bool:
     """
-    True on the first trading day of each month (day 1-3, weekday).
-    On rebalance days: full portfolio review, rotate underperformers.
-    On monitoring days: exit monitoring + immediate replacement only.
+    Returns True on the first trading day of each month (calendar day 1-3 that is a weekday).
+    On rebalance days: full portfolio rotation — compare all holdings against current top N
+    and rotate out underperformers even if no hard exit rule triggered.
+    On non-rebalance days: only hard exits (rank dropout / DMA breach) are acted on,
+    and a replacement is bought immediately for each exit.
     """
     today = date.today()
+    # Day 1-3 of the month AND a weekday (0=Mon, 4=Fri, 5=Sat, 6=Sun)
     return today.day <= 3 and today.weekday() < 5
 
 
@@ -77,15 +84,19 @@ def is_rebalance_day() -> bool:
 # LOAD LATEST PRICES FROM CACHE
 # ─────────────────────────────────────────────
 def load_latest_prices() -> dict:
-    """Reads latest closing price for every stock from cache. No re-fetch."""
+    """
+    Reads the most recent closing price for every stock from the CSV cache.
+    Used to calculate limit order prices and P&L. No network calls.
+    Returns a dict: {ticker: last_close_price}.
+    """
     prices = {}
     if os.path.exists(cfg.DATA_CACHE_FILE):
         try:
             close = pd.read_csv(cfg.DATA_CACHE_FILE, index_col=0, parse_dates=True)
             for ticker in close.columns:
-                series = close[ticker].dropna()
+                series = close[ticker].dropna()      # remove NaN entries (weekends/holidays)
                 if len(series) > 0:
-                    prices[ticker] = float(series.iloc[-1])
+                    prices[ticker] = float(series.iloc[-1])   # take the most recent price
             log.info(f"Loaded latest prices for {len(prices)} stocks from cache")
         except Exception as e:
             log.error(f"Could not read price cache: {e}")
@@ -101,32 +112,33 @@ def find_replacement(
     exits: list
 ) -> list:
     """
-    When a stock exits mid-month, immediately find the best replacement
-    from the current top 25 that isn't already held.
-
-    Returns list of tickers to buy as replacements.
+    When a stock exits mid-month (rank dropout or DMA breach), immediately
+    buy the best available replacement — don't wait for month-end rebalance.
+    Looks in the top EXIT_RANK_CUTOFF ranked stocks for candidates not already held.
+    Respects the sector cap so we don't end up over-concentrated.
+    Returns a list of replacement tickers (one per exit).
     """
-    # Remaining holdings after exits
+    # Determine which stocks we still hold after the exits
     remaining = [t for t in current_holdings if t not in exits]
 
-    # Candidates: top 25 ranked stocks not already in portfolio
-    top_25      = scored.head(cfg.EXIT_RANK_CUTOFF).index.tolist()
-    candidates  = [t for t in top_25 if t not in remaining]
+    # Best candidates are top-ranked stocks we don't already hold
+    top_25     = scored.head(cfg.EXIT_RANK_CUTOFF).index.tolist()
+    candidates = [t for t in top_25 if t not in remaining]
 
-    # Apply sector cap — count sectors in remaining holdings
+    # Count how many stocks from each sector are already in remaining holdings
     sector_count = {}
     for t in remaining:
         sector = UNIVERSE.get(t, "Unknown")
         sector_count[sector] = sector_count.get(sector, 0) + 1
 
-    # Pick replacements respecting sector cap
+    # Walk candidates in rank order, pick those that fit the sector cap
     replacements = []
     for t in candidates:
         sector = UNIVERSE.get(t, "Unknown")
         if sector_count.get(sector, 0) < cfg.MAX_PER_SECTOR:
             replacements.append(t)
             sector_count[sector] = sector_count.get(sector, 0) + 1
-        if len(replacements) == len(exits):
+        if len(replacements) == len(exits):    # one replacement per exit
             break
 
     if replacements:
@@ -138,9 +150,15 @@ def find_replacement(
 
 
 # ─────────────────────────────────────────────
-# KITE CONNECT LOGIN
+# KITE CONNECT CLIENT
 # ─────────────────────────────────────────────
 def get_kite_client():
+    """
+    Returns an authenticated KiteConnect client for live order placement.
+    In PAPER_MODE returns None (no real API calls are made).
+    In live mode, uses the access token written to .env by kite_login.py.
+    If no token is present, falls back to an interactive manual login flow.
+    """
     if PAPER_MODE:
         log.info("PAPER MODE — Kite Connect not initialised")
         return None
@@ -148,9 +166,11 @@ def get_kite_client():
         from kiteconnect import KiteConnect
         kite = KiteConnect(api_key=KITE_API_KEY)
         if KITE_ACCESS_TOKEN:
+            # Normal path — token was written to .env by kite_login.py this morning
             kite.set_access_token(KITE_ACCESS_TOKEN)
             log.info("Kite Connect authenticated")
         else:
+            # Fallback path — no token in .env, ask user to login manually
             login_url = kite.login_url()
             print(f"\nOpen this URL to login:\n{login_url}\n")
             request_token = input("Paste request_token from redirect URL: ").strip()
@@ -169,15 +189,24 @@ def get_kite_client():
 
 
 # ─────────────────────────────────────────────
-# PORTFOLIO STATE
+# PORTFOLIO STATE  (read/write current_holdings.json)
 # ─────────────────────────────────────────────
+
 def load_holdings() -> dict:
+    """
+    Reads current_holdings.json from disk.
+    Each entry: {ticker: {shares, avg_price, entry_date}}.
+    Handles the old format (bare integer share counts) by migrating them
+    to the new dict format with avg_price=0 and a 'migrated' flag.
+    Returns empty dict if the file doesn't exist yet.
+    """
     if os.path.exists(HOLDINGS_FILE):
         with open(HOLDINGS_FILE, "r") as f:
             raw = json.load(f)
         migrated = {}
         for ticker, val in raw.items():
             if isinstance(val, (int, float)):
+                # Old format — just an integer share count; migrate it
                 migrated[ticker] = {"shares": int(val), "avg_price": 0.0, "entry_date": "unknown", "migrated": True}
             else:
                 migrated[ticker] = val
@@ -186,10 +215,16 @@ def load_holdings() -> dict:
 
 
 def save_holdings(holdings: dict):
+    """
+    Writes the holdings dict back to current_holdings.json.
+    Also creates a dated backup in backups/ and removes backups older than 7 days.
+    This runs after every execution so the state is always current.
+    """
     with open(HOLDINGS_FILE, "w") as f:
         json.dump(holdings, f, indent=2)
     log.info(f"Holdings saved: { {t: get_shares(holdings,t) for t in holdings if get_shares(holdings,t) > 0} }")
-    # Daily backup — keeps last 7 days
+
+    # Daily backup in backups/ — named by date so we can recover any day's state
     try:
         import shutil
         from datetime import date as _date
@@ -197,7 +232,7 @@ def save_holdings(holdings: dict):
         os.makedirs(_backup_dir, exist_ok=True)
         _backup_file = os.path.join(_backup_dir, f"holdings_{_date.today()}.json")
         shutil.copy(HOLDINGS_FILE, _backup_file)
-        # Remove backups older than 7 days
+        # Purge backups older than 7 days to prevent indefinite growth
         import time
         _cutoff = time.time() - (7 * 86400)
         for _f in os.listdir(_backup_dir):
@@ -208,18 +243,21 @@ def save_holdings(holdings: dict):
         log.warning(f"Backup failed: {_e}")
 
 
-
-
 def get_shares(holdings: dict, ticker: str) -> int:
+    """Returns the number of shares held for a ticker (0 if not held)."""
     val = holdings.get(ticker, {})
     return val.get("shares", 0) if isinstance(val, dict) else int(val or 0)
 
+
 def get_avg_price(holdings: dict, ticker: str) -> float:
+    """Returns the weighted average buy price for a ticker (0.0 if unknown)."""
     val = holdings.get(ticker, {})
     return val.get("avg_price", 0.0) if isinstance(val, dict) else 0.0
 
+
 def set_holding(holdings: dict, ticker: str, shares: int,
                 avg_price: float = 0.0, entry_date: str = ""):
+    """Writes or updates a position in the holdings dict (does not save to disk)."""
     holdings[ticker] = {
         "shares"    : shares,
         "avg_price" : avg_price,
@@ -227,6 +265,13 @@ def set_holding(holdings: dict, ticker: str, shares: int,
     }
 
 def build_pnl_summary(holdings: dict, prices: dict) -> str:
+    """
+    Builds a formatted P&L string for all held positions.
+    Shows each stock's current price, unrealised P&L in rupees and percent.
+    Shows 'Entry: N/A' for migrated positions where avg_price is unknown.
+    Appends a total P&L and total value line at the bottom.
+    Used in the Telegram end-of-day notification.
+    """
     lines       = []
     total_cost  = 0.0
     total_value = 0.0
@@ -267,15 +312,21 @@ def build_pnl_summary(holdings: dict, prices: dict) -> str:
     return result
 
 def get_portfolio_value(kite, holdings: dict, prices: dict) -> float:
+    """
+    Returns the total current portfolio value (cash + stock holdings).
+    In PAPER_MODE returns the fixed CAPITAL constant (no real account data).
+    In live mode, queries Kite for the actual margin balance and open positions.
+    Falls back to CAPITAL if the Kite API call fails.
+    """
     if PAPER_MODE:
         return CAPITAL
     try:
         margins     = kite.margins(segment="equity")
-        cash        = margins["net"]
+        cash        = margins["net"]                          # available cash balance
         positions   = kite.positions()["net"]
         stock_value = sum(
             p["quantity"] * p["last_price"]
-            for p in positions if p["quantity"] > 0
+            for p in positions if p["quantity"] > 0           # only count long positions
         )
         return cash + stock_value
     except Exception as e:
@@ -285,6 +336,10 @@ def get_portfolio_value(kite, holdings: dict, prices: dict) -> float:
 
 # ─────────────────────────────────────────────
 # ORDER PLACEMENT
+# Thin wrappers around the Kite Connect API.
+# In PAPER_MODE, all orders are logged but no real API call is made.
+# In live mode, places a LIMIT DAY order on NSE as a CNC (delivery) product.
+# Returns a dict with 'status': 'paper' | 'placed' | 'failed'.
 # ─────────────────────────────────────────────
 def place_buy_order(kite, ticker: str, shares: int, limit_price: float) -> dict:
     if PAPER_MODE:
@@ -343,7 +398,9 @@ def place_sell_order(kite, ticker: str, shares: int, limit_price: float) -> dict
 
 
 # ─────────────────────────────────────────────
-# TELEGRAM
+# TELEGRAM NOTIFICATIONS
+# Sends the end-of-day summary (sells, buys, P&L) to the configured chat.
+# Silently skips if bot token or chat ID are not set in .env.
 # ─────────────────────────────────────────────
 def send_telegram(message: str):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
@@ -363,36 +420,46 @@ def send_telegram(message: str):
 
 # ─────────────────────────────────────────────
 # PLACE BUYS FOR A LIST OF TICKERS
-# Shared logic used by both monitoring and rebalance paths
+# Shared logic used by both the immediate-replacement path and the monthly rebalance.
+# Two-pass approach:
+#   Pass 1 — buy each ticker up to the equal-weight target allocation
+#   Pass 2 — redistribute any leftover cash across all in-scope positions
 # ─────────────────────────────────────────────
 def execute_buys(kite, tickers_to_buy: list, holdings: dict,
                  prices: dict, port_value: float, strength: float = 1.0, stocks_to_hold: int = 7) -> list:
     """
-    Places buy orders for given tickers.
-    Returns list of buy order descriptions for Telegram.
+    Places buy orders for the given list of tickers.
+    strength: regime strength 0.0-1.0 — scales down capital deployed when < 1.0.
+    stocks_to_hold: total target position count (used to set target per stock).
+    Returns a list of human-readable buy descriptions for the Telegram message.
+    Avg price in holdings is recorded at the market close price (not limit price)
+    because that is the realistic fill price on next-day open.
     """
-    buy_lines  = []
-    capital_deployed = port_value * strength
-    target           = capital_deployed / stocks_to_hold
+    buy_lines        = []
+    capital_deployed = port_value * strength         # scale by regime strength (0–100%)
+    target           = capital_deployed / stocks_to_hold   # equal-weight target per position
     log.info(f"Regime strength: {strength*100:.0f}% | Deploying {stocks_to_hold} positions @ {target:,.0f} each")
 
-    # Build rank→buffer map once — reused identically in both passes
+    # Assign limit order buffer per ticker based on its rank in tickers_to_buy.
+    # Higher-ranked (earlier in list) stocks get a larger buffer so we really fill them.
     buf_map = {}
     for i, t in enumerate(tickers_to_buy):
         if i < 5:
-            buf_map[t] = cfg.BUY_BUFFER_TOP5
+            buf_map[t] = cfg.BUY_BUFFER_TOP5    # top 5 → 5% above close
         elif i < 12:
-            buf_map[t] = cfg.BUY_BUFFER_MID
+            buf_map[t] = cfg.BUY_BUFFER_MID     # ranks 6–12 → 3% above close
         else:
-            buf_map[t] = cfg.BUY_BUFFER_REST
+            buf_map[t] = cfg.BUY_BUFFER_REST    # rest → 2% above close
 
     def _limit(ticker, close_price):
+        """Computes the limit order price = close × (1 + buffer)."""
         return round(close_price * (1 + buf_map.get(ticker, cfg.BUY_BUFFER_REST)), 1)
 
+    # ── First pass: buy each ticker up to equal-weight target ────────────────
     bought_count = 0
     for ticker in tickers_to_buy:
         if bought_count >= stocks_to_hold:
-            break
+            break                              # already at full position count
 
         price = prices.get(ticker, 0)
         if price <= 0:
@@ -400,21 +467,24 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
             continue
 
         if price > target:
+            # Single share costs more than the whole target allocation — skip
             log.info(f"Skipping {ticker} @ ₹{price:,.0f} — too expensive for ₹{target:,.0f} allocation")
             continue
 
         current_shares = get_shares(holdings, ticker)
         current_value  = current_shares * price
 
-        if current_value < target * 0.95:
+        if current_value < target * 0.95:    # only buy if meaningfully underweight (< 95%)
             buy_value     = target - current_value
-            shares_to_buy = int(buy_value / price)
+            shares_to_buy = int(buy_value / price)      # floor to whole shares
             limit_price   = _limit(ticker, price)
 
             if shares_to_buy > 0:
                 res = place_buy_order(kite, ticker, shares_to_buy, limit_price)
+                # Log with market price (not limit) — that's the realistic fill price
                 buy_lines.append(f"BUY {ticker} ×{shares_to_buy} @ ₹{price}")
                 if res["status"] in ("paper", "placed"):
+                    # Update holdings with new weighted average price
                     existing_shares = get_shares(holdings, ticker)
                     new_shares = existing_shares + shares_to_buy
                     old_avg = get_avg_price(holdings, ticker)
@@ -424,14 +494,16 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
             else:
                 log.info(f"Skipping {ticker} @ ₹{price:,.0f} — insufficient allocation for 1 share")
 
-    # ── Second pass: top up underweight positions from this buy list only ────
-    # Uses the same buf_map — limit prices are identical to the first pass.
+    # ── Second pass: redistribute leftover cash across bought positions ───────
+    # After the first pass, some cash may remain because integer share rounding
+    # means we can't buy exactly the target value. Redistribute this across
+    # the in-scope positions, buying more shares where possible.
     if bought_count > 0:
-        in_scope      = [t for t in tickers_to_buy if get_shares(holdings, t) > 0]
-        scope_val     = sum(get_shares(holdings, t) * prices.get(t, 0) for t in in_scope)
-        remaining_cash = capital_deployed - scope_val
+        in_scope       = [t for t in tickers_to_buy if get_shares(holdings, t) > 0]
+        scope_val      = sum(get_shares(holdings, t) * prices.get(t, 0) for t in in_scope)
+        remaining_cash = capital_deployed - scope_val     # cash not yet deployed
         if remaining_cash > 500 and in_scope:
-            new_target = (scope_val + remaining_cash) / len(in_scope)
+            new_target = (scope_val + remaining_cash) / len(in_scope)    # new equal target
             log.info(f"Redistributing ₹{remaining_cash:,.0f} unused cash across {len(in_scope)} in-scope positions")
             for ticker in in_scope:
                 price = prices.get(ticker, 0)
@@ -457,6 +529,13 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
 
 # ─────────────────────────────────────────────
 # MAIN EXECUTION FLOW
+# Called daily at 3:45 PM IST by scheduler.py (or directly).
+# Full flow:
+#   1. Load current holdings from disk
+#   2. Run the signal engine (regime check + momentum scores)
+#   3. If RISK-OFF: sell everything
+#   4. If RISK-ON: process exits, buy replacements, run monthly rebalance
+#   5. Save updated holdings + send Telegram summary
 # ─────────────────────────────────────────────
 def run_execution():
     if cfg.TRADING_HALTED:
@@ -466,35 +545,34 @@ def run_execution():
     log.info("=" * 55)
     log.info(f"EXECUTION RUN — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     log.info(f"MODE          : {'PAPER' if PAPER_MODE else '⚠️  LIVE'}")
-
-    # Force rebalance if holdings are empty and market is RISK-ON
     log.info("=" * 55)
 
-    # ── Load state ─────────────────────────────────────────────────────────
+    # ── Load current portfolio state ───────────────────────────────────────
     holdings        = load_holdings()
     current_tickers = [t for t in holdings if get_shares(holdings, t) > 0]
+    # Force full rebalance if portfolio is empty (first run or after RISK-OFF liquidation)
     rebalance = is_rebalance_day() or len(current_tickers) == 0
     log.info(f"Current holdings: {current_tickers or 'None (empty)'}")
 
-    # ── Load prices and data ────────────────────────────────────────────────
+    # ── Load today's closing prices from cache ─────────────────────────────
     latest_prices = load_latest_prices()
     if not latest_prices:
         log.error("No price data. Run data_manager.py first.")
         return
 
-    # ── Connect to broker ───────────────────────────────────────────────────
+    # ── Connect to broker (returns None in PAPER_MODE) ─────────────────────
     kite = get_kite_client()
 
-    # ── Run signal engine ───────────────────────────────────────────────────
+    # ── Run signal engine — regime + scores + exit signals ─────────────────
     log.info("Running signal engine...")
-    signals   = run_signals(current_tickers)
-    strength       = signals.get("strength", 1.0)
-    stocks_to_hold = max(1, round(cfg.TOP_N * strength))
-    regime    = signals["regime"]
+    signals        = run_signals(current_tickers)
+    strength       = signals.get("strength", 1.0)             # 0.0–1.0 from regime strength
+    stocks_to_hold = max(1, round(cfg.TOP_N * strength))      # scale position count by strength
+    regime         = signals["regime"]
     if cfg.FORCE_RISK_ON:
-        regime = "RISK-ON"  # Paper test override
-    portfolio = signals["portfolio"]
-    exits     = signals["exits"]
+        regime = "RISK-ON"   # override regime for paper testing — remove before going live
+    portfolio = signals["portfolio"]    # DataFrame of top N scored stocks
+    exits     = signals["exits"]        # list of currently held stocks that triggered exit rules
     log.info(f"Regime: {regime}")
 
     # ── RISK-OFF: sell everything immediately ───────────────────────────────

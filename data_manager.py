@@ -25,7 +25,9 @@ warnings.filterwarnings("ignore")
 
 import config as cfg
 
-# ── Universe (must match signals.py) ───────────────────────────────────────
+# ── Universe ticker list ─────────────────────────────────────────────────────
+# Must stay in sync with the UNIVERSE dict in signals.py.
+# yfinance requires the ".NS" suffix for NSE stocks (added in fetch_fresh below).
 UNIVERSE_TICKERS = [
     "360ONE",
     "3MINDIA",
@@ -279,15 +281,17 @@ UNIVERSE_TICKERS = [
     "ZYDUSLIFE",
 ]
 
+# Maps cache column names to Yahoo Finance tickers for the two indices we track
 INDEX_TICKERS = {
-    "nifty500": cfg.REGIME_TICKER,
-    "nifty50" : cfg.BENCHMARK_TICKER,
+    "nifty500": cfg.REGIME_TICKER,    # ^CRSLDX — used for regime filter
+    "nifty50" : cfg.BENCHMARK_TICKER, # ^NSEI    — used as performance benchmark
 }
 
 
 # ─────────────────────────────────────────────
 # SAFE COLUMN READER
-# Handles yfinance 2.x None column issue
+# yfinance 2.x changed its DataFrame structure and sometimes returns None
+# for a ticker column instead of raising a KeyError. This wrapper handles both.
 # ─────────────────────────────────────────────
 def safe_get_column(df: pd.DataFrame, col: str) -> pd.Series:
     """
@@ -308,14 +312,17 @@ def safe_get_column(df: pd.DataFrame, col: str) -> pd.Series:
 
 # ─────────────────────────────────────────────
 # FETCH FRESH DATA FOR A DATE RANGE
+# Downloads OHLCV data from Yahoo Finance for the given tickers and date range.
+# yfinance 2.x can return MultiIndex DataFrames in different layouts depending
+# on whether one or many tickers are downloaded — this handles both layouts.
 # ─────────────────────────────────────────────
 def fetch_fresh(tickers: list, start: str, end: str) -> tuple:
     """
-    Downloads OHLCV data for given tickers and date range.
-    Returns (close_df, volume_df) with clean ticker column names.
-    Handles yfinance 2.x column format safely.
+    Downloads adjusted OHLCV data from Yahoo Finance.
+    Returns (close_df, volume_df, open_df) — each a DataFrame with
+    clean NSE ticker names as columns (the .NS suffix is stripped).
     """
-    yf_tickers = [t + ".NS" for t in tickers]
+    yf_tickers = [t + ".NS" for t in tickers]   # yfinance requires .NS suffix for NSE stocks
     print(f"  Downloading {len(yf_tickers)} stocks ({start} to {end})...")
 
     try:
@@ -323,15 +330,15 @@ def fetch_fresh(tickers: list, start: str, end: str) -> tuple:
             yf_tickers,
             start=start,
             end=end,
-            auto_adjust=True,
+            auto_adjust=True,     # adjusts for splits and dividends automatically
             progress=False,
-            group_by="ticker",   # group by ticker for cleaner structure
+            group_by="ticker",    # groups columns by ticker for easier access
         )
     except Exception as e:
         print(f"  Download error: {e}")
-        return pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-    # ── Extract close and volume safely ─────────────────────────────────
+    # ── Extract close, volume, open per ticker — handle yfinance column layouts ─
     close_data  = {}
     volume_data = {}
     open_data   = {}
@@ -340,28 +347,32 @@ def fetch_fresh(tickers: list, start: str, end: str) -> tuple:
         yf_t = t + ".NS"
         try:
             if isinstance(raw.columns, pd.MultiIndex):
+                # yfinance 2.x multi-ticker layout — two possible orderings
                 if yf_t in raw.columns.get_level_values(0):
+                    # Layout: (ticker, field) — ticker is the first level
                     c = raw[yf_t]["Close"]
                     v = raw[yf_t]["Volume"]
                     o = raw[yf_t]["Open"]
                 elif yf_t in raw.columns.get_level_values(1):
+                    # Layout: (field, ticker) — field is the first level
                     c = raw["Close"][yf_t]
                     v = raw["Volume"][yf_t]
                     o = raw["Open"][yf_t]
                 else:
-                    continue
+                    continue    # ticker not in download result — skip
             else:
+                # Single ticker download — flat column names
                 c = raw["Close"]
                 v = raw["Volume"]
                 o = raw["Open"]
 
             if c is not None and len(c.dropna()) > 0:
-                close_data[t]  = c
+                close_data[t]  = c     # store with clean ticker name (no .NS)
                 volume_data[t] = v
                 open_data[t]   = o
 
         except Exception:
-            continue
+            continue    # silently skip any ticker that failed to parse
 
     close_df  = pd.DataFrame(close_data)
     volume_df = pd.DataFrame(volume_data)
@@ -373,23 +384,24 @@ def fetch_fresh(tickers: list, start: str, end: str) -> tuple:
 
 # ─────────────────────────────────────────────
 # UPDATE CACHE
+# Three-case logic:
+#   Case 1 — No cache files exist → full download from DATA_FETCH_START (~4 min)
+#   Case 2 — Cache is current (last date ≥ today) → nothing to do
+#   Case 3 — Cache is stale → incremental update (only missing days, ~30 sec)
 # ─────────────────────────────────────────────
 def update_cache():
     """
-    Checks if cache exists and is up to date.
-    If stale, fetches only the missing days and appends.
-    If cache does not exist, does a full download.
-
-    This is the function to run daily.
+    Main function to call daily (via scheduler.py or manually at 3:40 PM IST).
+    Keeps the CSV caches up to date without re-downloading historical data.
     """
     today     = datetime.today().date()
-    fetch_end = (datetime.today() + timedelta(days=1)).strftime("%Y-%m-%d")
+    fetch_end = (datetime.today() + timedelta(days=1)).strftime("%Y-%m-%d")   # +1 so today is included
 
     print(f"\n{'='*50}")
     print(f"  DATA MANAGER — {today}")
     print(f"{'='*50}")
 
-    # ── Case 1: No cache exists — full download ──────────────────────────
+    # ── Case 1: No cache — full download ─────────────────────────────────
     if not os.path.exists(cfg.DATA_CACHE_FILE):
         print("No cache found. Running full download (this takes ~4 minutes)...")
         fetch_start = cfg.DATA_FETCH_START
@@ -404,44 +416,43 @@ def update_cache():
         _update_index_cache(fetch_start, fetch_end)
         return
 
-    # ── Case 2: Cache exists — check if up to date ───────────────────────
-    existing = pd.read_csv(cfg.DATA_CACHE_FILE, index_col=0, parse_dates=True)
+    # ── Case 2: Cache exists — check last date ────────────────────────────
+    existing  = pd.read_csv(cfg.DATA_CACHE_FILE, index_col=0, parse_dates=True)
     last_date = existing.index[-1].date()
     print(f"Cache last updated : {last_date}")
     print(f"Today              : {today}")
 
-    # If market was open today (weekday) and cache doesn't have today
-    # fetch from last cached date onwards
     if last_date >= today:
         print("Cache is up to date. No update needed.")
         return
 
-    # ── Case 3: Cache is stale — fetch only missing days ─────────────────
+    # ── Case 3: Stale cache — fetch only missing days ─────────────────────
+    # Start from the day after the last cached date
     fetch_start = (last_date + timedelta(days=1)).strftime("%Y-%m-%d")
     print(f"Fetching new data from {fetch_start}...")
 
     new_close, new_volume, new_open = fetch_fresh(UNIVERSE_TICKERS, fetch_start, fetch_end)
 
     if new_close.empty:
+        # Happens on market holidays or if run before market close
         print("No new data returned. Market may have been closed.")
         return
 
-    # Load existing volume cache
     existing_vol = pd.read_csv(cfg.VOLUME_CACHE, index_col=0, parse_dates=True)
 
-    # Align columns — only update columns that exist in both
-    common_cols  = existing.columns.intersection(new_close.columns)
-    new_cols     = new_close.columns.difference(existing.columns)
+    # Only update columns that already exist in the cache (common between old and new)
+    common_cols = existing.columns.intersection(new_close.columns)
+    new_cols    = new_close.columns.difference(existing.columns)   # newly listed stocks
 
-    # Append new rows
-    updated_close  = pd.concat([existing, new_close[common_cols]])
-    updated_vol    = pd.concat([existing_vol, new_volume[common_cols]])
+    # Concatenate old + new rows for each cache
+    updated_close = pd.concat([existing,     new_close[common_cols]])
+    updated_vol   = pd.concat([existing_vol, new_volume[common_cols]])
 
-    # Remove duplicate dates (keep latest)
-    updated_close  = updated_close[~updated_close.index.duplicated(keep="last")]
-    updated_vol    = updated_vol[~updated_vol.index.duplicated(keep="last")]
+    # Remove any duplicate dates that might arise from running twice on the same day
+    updated_close = updated_close[~updated_close.index.duplicated(keep="last")]
+    updated_vol   = updated_vol[~updated_vol.index.duplicated(keep="last")]
 
-    # Add any new tickers as new columns
+    # Append data for any newly listed stocks not in the existing cache
     for col in new_cols:
         updated_close[col] = new_close[col]
         updated_vol[col]   = new_volume.get(col, pd.Series())
@@ -453,7 +464,7 @@ def update_cache():
     print(f"Cache now has: {updated_close.shape[0]} days × {updated_close.shape[1]} stocks")
     print(f"Date range: {updated_close.index[0].date()} → {updated_close.index[-1].date()}")
 
-    # Update index data too
+    # Update the index cache (Nifty 500 + Nifty 50) for the same date range
     _update_index_cache(fetch_start, fetch_end)
 
 
