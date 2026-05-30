@@ -5,11 +5,12 @@ Walk-forward backtest with daily exit monitoring.
 
 Key improvement over monthly-only version:
   - Regime check runs EVERY trading day
-  - 100 DMA exit checked EVERY trading day
+  - DMA exit (cfg.DMA_EXIT days) checked EVERY trading day
   - Rank exit checked EVERY trading day (using daily-recomputed scores)
   - Exit triggers immediate replacement buy — no cash sitting idle
   - Full portfolio rotation on first trading day of each month only
-  - Score computation DAILY (matches live execution.py behaviour)
+  - Score computation DAILY — matches live execution.py behaviour
+  - DMA exit uses cfg.DMA_EXIT (250) — not 100
 
 This more accurately reflects live execution.py behaviour.
 Expected result vs monthly backtester:
@@ -421,7 +422,7 @@ def get_regime_strength(nifty500, nifty100, nifty_mid, date) -> float:
     fraction = (composite - cfg.REGIME_DEPLOY_MIN) / (cfg.REGIME_DEPLOY_MAX - cfg.REGIME_DEPLOY_MIN)
     return max(0.0, min(1.0, fraction))
 
-def is_above_100dma(close, ticker, date):
+def is_above_exit_dma(close, ticker, date):
     if ticker not in close.columns:
         return True
     p = close[ticker].loc[:date].dropna()
@@ -607,7 +608,7 @@ def run_backtest():
 
     cached_scored        = pd.DataFrame()
     cached_top_25        = []
-    cached_top_7         = []
+    cached_portfolio         = []
     in_risk_off          = False
     last_rebalance_month = None   # month comparison — avoids type mismatch bug
 
@@ -669,7 +670,7 @@ def run_backtest():
                 in_risk_off  = True
                 cached_scored = pd.DataFrame()
                 cached_top_25 = []
-                cached_top_7  = []
+                cached_portfolio  = []
 
             # Record daily value (all cash)
             eq_curve.append({"date":day,"value":cash,"regime":"OFF"})
@@ -685,7 +686,7 @@ def run_backtest():
         cached_scored = compute_scores_on(close, volume, day, tickers)
         if not cached_scored.empty:
             cached_top_25 = cached_scored.head(cfg.EXIT_RANK_CUTOFF).index.tolist()
-            cached_top_7  = pick_portfolio(cached_scored)
+            cached_portfolio  = pick_portfolio(cached_scored)
 
         # ── DAILY EXIT CHECK ─────────────────────────────────────────────────
         # Check every current holding against exit rules using today's prices
@@ -699,9 +700,9 @@ def run_backtest():
             if cached_top_25 and t not in cached_top_25:
                 exit_reason = "rank"
 
-            # Rule 2: price below 100 DMA (checked with today's price)
-            if t in close.columns and not is_above_100dma(close, t, day):
-                exit_reason = "100DMA"
+            # Rule 2: price below DMA_EXIT (checked with today's price)
+            if t in close.columns and not is_above_exit_dma(close, t, day):
+                exit_reason = f"{cfg.DMA_EXIT}DMA"
 
             if exit_reason:
                 exits.append((t, exit_reason))
@@ -780,8 +781,8 @@ def run_backtest():
         if is_rebalance and not cached_scored.empty:
             current_held_after = [t for t, s in holdings.items() if s > 0]
 
-            # Find holdings not in current top 7 — rotate them out
-            rotate_out = [t for t in current_held_after if t not in cached_top_7]
+            # Find holdings not in current top N — rotate them out
+            rotate_out = [t for t in current_held_after if t not in cached_portfolio]
             for t in rotate_out:
                 sh = holdings.get(t, 0)
                 if sh > 0:
@@ -811,7 +812,7 @@ def run_backtest():
 
             # Buy top N (new positions + top-ups) with realistic fills
             bought = 0
-            for t in cached_top_7:
+            for t in cached_portfolio:
                 if bought >= stocks_to_hold:
                     break
                 px = get_price(close, t, day)

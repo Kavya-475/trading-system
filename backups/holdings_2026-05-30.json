@@ -1,0 +1,42 @@
+{
+  "NATIONALUM": {
+    "shares": 29,
+    "avg_price": 424.4500122070313,
+    "entry_date": "2026-05-30"
+  },
+  "GVT&D": {
+    "shares": 2,
+    "avg_price": 5148.60009765625,
+    "entry_date": "2026-05-30"
+  },
+  "MCX": {
+    "shares": 4,
+    "avg_price": 2954.5,
+    "entry_date": "2026-05-30"
+  },
+  "BSE": {
+    "shares": 3,
+    "avg_price": 4146.10009765625,
+    "entry_date": "2026-05-30"
+  },
+  "ADANIPOWER": {
+    "shares": 51,
+    "avg_price": 243.3699951171875,
+    "entry_date": "2026-05-30"
+  },
+  "ADANIENSOL": {
+    "shares": 8,
+    "avg_price": 1513.300048828125,
+    "entry_date": "2026-05-30"
+  },
+  "VEDL": {
+    "shares": 35,
+    "avg_price": 352.6000061035156,
+    "entry_date": "2026-05-30"
+  },
+  "BHARATFORG": {
+    "shares": 6,
+    "avg_price": 1957.199951171875,
+    "entry_date": "2026-05-30"
+  }
+}

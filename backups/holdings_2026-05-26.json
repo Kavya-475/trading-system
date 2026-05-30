@@ -1,52 +1,52 @@
 {
   "NATIONALUM": {
     "shares": 24,
-    "avg_price": 403.0,
+    "avg_price": 423.2,
     "entry_date": "2026-05-26"
   },
   "GVT&D": {
     "shares": 2,
-    "avg_price": 4774.7001953125,
+    "avg_price": 5013.4,
     "entry_date": "2026-05-26"
   },
   "MCX": {
     "shares": 3,
-    "avg_price": 3313.89990234375,
+    "avg_price": 3479.6,
     "entry_date": "2026-05-26"
   },
   "BHARATFORG": {
     "shares": 5,
-    "avg_price": 1918.300048828125,
+    "avg_price": 1975.8,
     "entry_date": "2026-05-26"
   },
   "ADANIPOWER": {
     "shares": 42,
-    "avg_price": 233.3800048828125,
+    "avg_price": 240.4,
     "entry_date": "2026-05-26"
   },
   "ADANIENSOL": {
     "shares": 6,
-    "avg_price": 1463.300048828125,
+    "avg_price": 1507.2,
     "entry_date": "2026-05-26"
   },
   "BSE": {
     "shares": 2,
-    "avg_price": 4291.2001953125,
+    "avg_price": 4419.9,
     "entry_date": "2026-05-26"
   },
   "HINDALCO": {
     "shares": 9,
-    "avg_price": 1099.5999755859375,
+    "avg_price": 1132.6,
     "entry_date": "2026-05-26"
   },
   "SAIL": {
     "shares": 50,
-    "avg_price": 198.32000732421875,
+    "avg_price": 204.3,
     "entry_date": "2026-05-26"
   },
   "GLENMARK": {
     "shares": 4,
-    "avg_price": 2337.0,
+    "avg_price": 2407.1,
     "entry_date": "2026-05-26"
   }
 }

@@ -29,7 +29,7 @@ import numpy as np
 
 import config as cfg
 from signals import run_signals, UNIVERSE, compute_scores, apply_liquidity_filter
-from data_manager import load_for_signals, load_index_data
+from data_manager import load_for_signals
 
 # ── Load secrets ────────────────────────────────────────────────────────────
 load_dotenv()
@@ -413,12 +413,12 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
 
             if shares_to_buy > 0:
                 res = place_buy_order(kite, ticker, shares_to_buy, limit_price)
-                buy_lines.append(f"BUY {ticker} ×{shares_to_buy} @ ₹{limit_price}")
+                buy_lines.append(f"BUY {ticker} ×{shares_to_buy} @ ₹{price}")
                 if res["status"] in ("paper", "placed"):
                     existing_shares = get_shares(holdings, ticker)
                     new_shares = existing_shares + shares_to_buy
                     old_avg = get_avg_price(holdings, ticker)
-                    new_avg = (old_avg * existing_shares + limit_price * shares_to_buy) / new_shares if existing_shares > 0 and old_avg > 0 else limit_price
+                    new_avg = (old_avg * existing_shares + price * shares_to_buy) / new_shares if existing_shares > 0 and old_avg > 0 else price
                     set_holding(holdings, ticker, new_shares, new_avg)
                     bought_count += 1
             else:
@@ -444,12 +444,12 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
                     limit_price   = _limit(ticker, price)
                     if shares_to_buy > 0:
                         res = place_buy_order(kite, ticker, shares_to_buy, limit_price)
-                        buy_lines.append(f"BUY {ticker} ×{shares_to_buy} @ ₹{limit_price} [top-up]")
+                        buy_lines.append(f"BUY {ticker} ×{shares_to_buy} @ ₹{price} [top-up]")
                         if res["status"] in ("paper", "placed"):
                             existing_shares = get_shares(holdings, ticker)
                             new_shares = existing_shares + shares_to_buy
                             old_avg = get_avg_price(holdings, ticker)
-                            new_avg = (old_avg * existing_shares + limit_price * shares_to_buy) / new_shares if existing_shares > 0 and old_avg > 0 else limit_price
+                            new_avg = (old_avg * existing_shares + price * shares_to_buy) / new_shares if existing_shares > 0 and old_avg > 0 else price
                             set_holding(holdings, ticker, new_shares, new_avg)
 
     return buy_lines
@@ -561,13 +561,13 @@ def run_execution():
     if rebalance and not scored.empty:
         log.info("Full monthly rebalance — reviewing all positions...")
 
-        top_7        = portfolio.index.tolist() if not portfolio.empty else []
+        top_n        = portfolio.index.tolist() if not portfolio.empty else []
         held_tickers = [t for t, s in holdings.items() if s > 0]
 
-        # Find holdings not in current top 7 that should be rotated out
+        # Find holdings not in current top N that should be rotated out
         rotate_out = []
         for t in held_tickers:
-            if t not in top_7 and t not in exits:
+            if t not in top_n and t not in exits:
                 rank = scored.index.tolist().index(t) if t in scored.index else 999
                 log.info(f"  Rotation candidate: {t} (rank {rank+1})")
                 rotate_out.append(t)
@@ -583,10 +583,10 @@ def run_execution():
                 if res["status"] in ("paper", "placed"):
                     set_holding(holdings, ticker, 0)
 
-        # Buy full top 7 (including rotations)
+        # Buy full top N (including rotations)
         port_value    = get_portfolio_value(kite, holdings, latest_prices)
         new_lines     = execute_buys(
-            kite, top_7, holdings, latest_prices, port_value, strength, stocks_to_hold
+            kite, top_n, holdings, latest_prices, port_value, strength, stocks_to_hold
         )
         buy_lines.extend(new_lines)
 

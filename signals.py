@@ -443,9 +443,9 @@ def check_exit_signals(close: pd.DataFrame, scored: pd.DataFrame,
         if t in close.columns:
             try:
                 p      = close[t].dropna()
-                dma100 = p.rolling(cfg.DMA_EXIT).mean().iloc[-1]
-                if p.iloc[-1] < dma100:
-                    reason = f"below 100-DMA ({dma100:.0f})"
+                dma_exit = p.rolling(cfg.DMA_EXIT).mean().iloc[-1]
+                if p.iloc[-1] < dma_exit:
+                    reason = f"below {cfg.DMA_EXIT}-DMA ({dma_exit:.0f})"
             except Exception:
                 pass
         if reason:

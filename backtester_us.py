@@ -26,20 +26,20 @@ warnings.filterwarnings("ignore")
 # ─────────────────────────────────────────────
 # STRATEGY PARAMETERS (identical to India)
 # ─────────────────────────────────────────────
-TOP_N            = 7
-MAX_PER_SECTOR   = 3
+TOP_N            = 10
+MAX_PER_SECTOR   = 4
 EXIT_RANK_CUTOFF = 25
-W_MOM_12M        = 0.40
-W_MOM_6M         = 0.35
-W_MOM_3M         = 0.15
-W_VOL            = -0.10
-LOOKBACK_12M     = 252
-LOOKBACK_6M      = 126
-LOOKBACK_3M      = 63
-SKIP_RECENT      = 20
+W_MOM_12M        = 0.50
+W_MOM_6M         = 0.40
+W_MOM_3M         = 0.20
+W_VOL            = -0.15
+LOOKBACK_12M     = 280
+LOOKBACK_6M      = 140
+LOOKBACK_3M      = 80
+SKIP_RECENT      = 40
 REGIME_DMA       = 200
-DMA_EXIT         = 100
-MIN_PRICE        = 10       # USD — filters penny stocks
+DMA_EXIT         = 250
+MIN_PRICE        = 0      # USD — filters penny stocks
 RISK_FREE_RATE   = 0.04     # 4% — US Fed Funds rate approx
 
 # ─────────────────────────────────────────────
@@ -62,10 +62,10 @@ def txn_cost(value, side):
 # ─────────────────────────────────────────────
 # BACKTEST SETTINGS
 # ─────────────────────────────────────────────
-START_DATE       = "2018-01-01"
-END_DATE         = "2026-05-22"
+START_DATE       = "2024-01-01"
+END_DATE         = "2025-12-31"
 INITIAL_CAPITAL  = 100000
-DATA_FETCH_START = "2018-01-01"
+DATA_FETCH_START = "2000-01-01"
 DATA_FETCH_END   = "2026-05-22"
 
 # Separate cache files — does not touch Indian cache
