@@ -6,10 +6,10 @@ Walk-forward backtest with daily exit monitoring.
 Key improvement over monthly-only version:
   - Regime check runs EVERY trading day
   - 100 DMA exit checked EVERY trading day
-  - Rank exit checked EVERY trading day (using last monthly scores)
+  - Rank exit checked EVERY trading day (using daily-recomputed scores)
   - Exit triggers immediate replacement buy — no cash sitting idle
   - Full portfolio rotation on first trading day of each month only
-  - Score computation monthly only (performance + realism)
+  - Score computation DAILY (matches live execution.py behaviour)
 
 This more accurately reflects live execution.py behaviour.
 Expected result vs monthly backtester:
@@ -681,12 +681,11 @@ def run_backtest():
         # ── RISK-ON ─────────────────────────────────────────────────────────
         in_risk_off = False
 
-        # ── REBALANCE DAY: recompute full scores ─────────────────────────────
-        if is_rebalance:
-            cached_scored = compute_scores_on(close, volume, day, tickers)
-            if not cached_scored.empty:
-                cached_top_25 = cached_scored.head(cfg.EXIT_RANK_CUTOFF).index.tolist()
-                cached_top_7  = pick_portfolio(cached_scored)
+        # ── DAILY SCORES (matches live execution.py — scores fresh every day) ──
+        cached_scored = compute_scores_on(close, volume, day, tickers)
+        if not cached_scored.empty:
+            cached_top_25 = cached_scored.head(cfg.EXIT_RANK_CUTOFF).index.tolist()
+            cached_top_7  = pick_portfolio(cached_scored)
 
         # ── DAILY EXIT CHECK ─────────────────────────────────────────────────
         # Check every current holding against exit rules using today's prices
@@ -696,7 +695,7 @@ def run_backtest():
         for t in current_held:
             exit_reason = None
 
-            # Rule 1: dropped out of top 25 (using cached monthly scores)
+            # Rule 1: dropped out of top 25 (using today's scores)
             if cached_top_25 and t not in cached_top_25:
                 exit_reason = "rank"
 
