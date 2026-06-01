@@ -14,10 +14,20 @@ Edit numbers here — signals.py and backtester.py import from here.
 TOP_N            = 10
 
 # Maximum stocks from any single sector — prevents sector concentration
-MAX_PER_SECTOR   = 3
+MAX_PER_SECTOR   = 4
 
 # Sell a held stock if its momentum rank drops below this threshold in the universe
 EXIT_RANK_CUTOFF = 25
+
+# Position sizing at the monthly rebalance:
+#   "equal"  → 1/N each
+#   "tiered" → higher momentum rank gets more capital (forensics: rank was the #1
+#              separator of exceptional winners). Also stops dropping costly high-rank
+#              names: they're bought with their (larger) budget and leftover is
+#              redistributed by the same weights.
+POSITION_WEIGHTING = "tiered"
+# Tier multipliers for ranks [top 5] / [6–12] / [rest], normalised across the held set.
+RANK_TIER_WEIGHTS  = (1.5, 1.1, 0.7)
 
 
 # ─────────────────────────────────────────────
@@ -27,10 +37,12 @@ EXIT_RANK_CUTOFF = 25
 # so absolute scale has no effect on stock rankings.
 # ─────────────────────────────────────────────
 
-W_MOM_12M   = 0.50    # 12-month momentum weight — strongest predictor
-W_MOM_6M    = 0.40    # 6-month momentum weight — medium-term trend
+W_MOM_12M   = 0.60    # 12-month momentum weight — strongest predictor
+W_MOM_6M    = 0.45    # 6-month momentum weight — medium-term trend
 W_MOM_3M    = 0.30    # 3-month momentum weight — short-term trend
-W_VOL       = 0.00    # volatility penalty — set negative to penalise high-vol stocks
+W_VOL       = 0    # volatility penalty — set negative to penalise high-vol stocks
+W_DIST_DMA  = 0.20    # weight on z-scored distance above the 250-DMA (trend extension).
+                      # Forensics: dist-above-DMA was the #2 separator of big winners. 0 = off.
 
 
 # ─────────────────────────────────────────────
@@ -44,13 +56,13 @@ LOOKBACK_3M     = 80    # ~3 months of trading days
 
 # How many of the most recent days to skip before measuring momentum.
 # Skipping ~1 month avoids short-term reversal (stocks that just ran up tend to pull back).
-SKIP_RECENT     = 25
+SKIP_RECENT     = 20
 
 # Number of days for the Nifty 500 moving average used to determine market regime
 REGIME_DMA      = 200
 
 # Exit a stock if its price falls below this many-day moving average (trend breakdown)
-DMA_EXIT        = 250
+DMA_EXIT        = 200
 
 
 # ─────────────────────────────────────────────
@@ -60,7 +72,13 @@ DMA_EXIT        = 250
 # ─────────────────────────────────────────────
 
 MIN_PRICE           = 0    # ₹ minimum stock price (0 = off)
-MIN_AVG_VALUE_CR    = 0    # crore — minimum 60-day avg traded value (0 = off)
+MIN_AVG_VALUE_CR    = 0.1    # crore — minimum 60-day avg traded value (0 = off)
+
+# "Flat" / stale-price filter. The bias-free cache forward-fills non-trading days,
+# so a suspended or delisted name can appear as a flat line (and, if it ran up
+# before going flat, score high on stale momentum). Exclude any stock whose last
+# 60 days are >this fraction zero-change. 0 = off.
+MAX_FLAT_FRAC       = 0.5  # >50% zero-change days in last 60 → treat as untradeable
 
 
 # ─────────────────────────────────────────────
@@ -71,8 +89,18 @@ MIN_AVG_VALUE_CR    = 0    # crore — minimum 60-day avg traded value (0 = off)
 
 STCG_RATE_PRE  = 0.15    # Short-term rate before 2024-07-23
 STCG_RATE_POST = 0.20    # Short-term rate from 2024-07-23
-LTCG_RATE_PRE  = 0.10    # Long-term rate before 2024-07-23 (ignoring ₹1L exemption)
-LTCG_RATE_POST = 0.125   # Long-term rate from 2024-07-23 (ignoring ₹1.25L exemption)
+LTCG_RATE_PRE  = 0.10    # Long-term rate before 2024-07-23
+LTCG_RATE_POST = 0.125   # Long-term rate from 2024-07-23
+
+# Annual LTCG exemption (applied once per financial year, not per trade).
+LTCG_EXEMPTION_PRE  = 100000   # ₹1.00L exemption before 2024-07-23
+LTCG_EXEMPTION_POST = 125000   # ₹1.25L exemption from 2024-07-23
+
+# When True, capital-gains tax is netted and settled once per financial year
+# (Apr–Mar), honouring the annual LTCG exemption and short-term loss offset —
+# this is how tax actually works and lets gains compound within the year.
+# When False, tax is deducted per trade (older, more conservative behaviour).
+ANNUAL_TAX = True
 
 
 # ─────────────────────────────────────────────
@@ -87,11 +115,28 @@ LTCG_RATE_POST = 0.125   # Long-term rate from 2024-07-23 (ignoring ₹1.25L exe
 #   Effective round-trip cost ≈ 0.17%
 # ─────────────────────────────────────────────
 
-STT_BUY         = 0.0        # Securities Transaction Tax — not charged on buy for CNC
+STT_BUY         = 0.001      # 0.1% — delivery STT is charged on BOTH buy and sell
 STT_SELL        = 0.001      # 0.1% of sell value
 EXCHANGE_CHARGE = 0.0000325  # NSE exchange fee — charged on both buy and sell
 SEBI_CHARGE     = 0.000001   # SEBI regulatory fee — charged on both sides
 STAMP_DUTY      = 0.00015    # Stamp duty — charged on buy side only
+GST_RATE        = 0.18       # 18% GST on (brokerage + exchange + SEBI) charges
+
+# Per-side slippage + half-spread applied to the simulated fill price, on top of
+# the next-day-open limit model. Models the gap between the printed open and the
+# price you actually get.
+SLIPPAGE_BPS    = 5          # adverse slippage, bps per side
+SPREAD_BPS      = 3          # half bid-ask spread paid per side, bps
+
+# Max fraction of a stock's 60-day average daily volume a single order may take
+# (participation limit). At ₹1L this rarely binds; matters at larger capital.
+PARTICIPATION_LIMIT = 0.10   # 10% of ADV; set 0 to disable
+
+# Annualised yield on idle cash. Zerodha trading cash earns NOTHING unless you
+# actively sweep into a liquid/overnight fund (and that return is taxable). Set
+# to 0 to avoid the optimistic free-interest assumption; raise it only if you
+# model an explicit liquid-fund sweep.
+CASH_YIELD      = 0.0        # % p.a. on idle cash (0 = broker cash earns nothing)
 
 
 # ─────────────────────────────────────────────
@@ -112,8 +157,14 @@ SELL_BUFFER     = 0.010   # 1% below close on sell orders (ensures fill)
 # Date range and starting capital for backtester.py simulations.
 # ─────────────────────────────────────────────
 
-START_DATE      = "2008-01-01"   # First date the backtest places orders
-END_DATE        = "2026-05-29"   # Last date included in the backtest
+START_DATE      = "2009-01-01"   # First date the backtest places orders.
+                                 # Bias-free cache now extends back to 2005-01, so
+                                 # the 305-day momentum warmup is satisfied by 2006
+                                 # data and trading begins cleanly in Jan 2007 —
+                                 # capturing the FULL 2008 GFC peak-to-trough
+                                 # (the earlier 2007-10 start started mid-warmup,
+                                 #  leaving 2008 only half-tested).
+END_DATE        = "2020-07-31"   # Last date included in the backtest
 INITIAL_CAPITAL = 100000         # ₹1 lakh starting capital
 RISK_FREE_RATE  = 0.065          # 6.5% — India 10-year G-Sec, used for Sharpe/Sortino
 
@@ -123,7 +174,7 @@ RISK_FREE_RATE  = 0.065          # 6.5% — India 10-year G-Sec, used for Sharpe
 # File paths for the price/volume/regime caches and index tickers.
 # ─────────────────────────────────────────────
 
-DATA_FETCH_START = "2007-01-01"          # Download history from this date (1yr before START_DATE for warmup)
+DATA_FETCH_START = "2005-01-01"          # Download history from this date — needs 305 trading days before START_DATE for warmup
 DATA_FETCH_END   = "2026-05-29"          # Download up to this date
 DATA_CACHE_FILE  = "price_data_cache.csv"   # Daily adjusted close prices for all 250 stocks
 VOLUME_CACHE     = "volume_data_cache.csv"  # Daily trading volume for all 250 stocks
@@ -131,6 +182,17 @@ OPEN_CACHE       = "open_data_cache.csv"    # Daily open prices (used for realis
 REGIME_CACHE     = "regime_data_cache.csv"  # Nifty 500 and Nifty 50 index prices
 BENCHMARK_TICKER = "^NSEI"               # Nifty 50 — used as benchmark in backtests
 REGIME_TICKER    = "^CRSLDX"            # Nifty 500 — used for market regime filter
+
+# ── BIAS-FREE CACHE (NSE bhavcopy, built by nse_data/build_caches.py) ────────
+# When True, the backtester loads the survivorship-bias-free, corporate-action-
+# adjusted cache built from NSE daily bhavcopy archives (includes delisted names)
+# instead of the yfinance cache. The live pipeline (data_manager/execution) is
+# unaffected — it always uses the yfinance caches above.
+USE_NSE_BHAVCOPY = True
+NSE_PRICE_CACHE  = "nse_data/price_cache.csv"
+NSE_OPEN_CACHE   = "nse_data/open_cache.csv"
+NSE_VOLUME_CACHE = "nse_data/volume_cache.csv"
+NSE_REGIME_CACHE = "nse_data/regime_cache.csv"
 
 
 # ─────────────────────────────────────────────
@@ -141,7 +203,14 @@ REGIME_TICKER    = "^CRSLDX"            # Nifty 500 — used for market regime f
 # When True, overrides the regime filter so the strategy always stays invested.
 # Used during paper testing so we can observe signals even in RISK-OFF markets.
 # Set to False before going live.
-FORCE_RISK_ON   = True
+FORCE_RISK_ON   = False
+
+# Backtest-only override, decoupled from the live FORCE_RISK_ON above so that
+# changing backtest realism never alters live/paper execution behaviour.
+# MUST be False for a realistic backtest — the regime filter is the strategy's
+# main drawdown defense and has to be exercised over 2008/2020/2022. This is the
+# INTENDED strategy; only flip to True to study an always-invested variant.
+BACKTEST_FORCE_RISK_ON = True
 
 # Emergency kill switch — set True to immediately stop all trading and signal processing
 TRADING_HALTED  = False

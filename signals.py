@@ -421,6 +421,10 @@ def compute_scores(close: pd.DataFrame, tickers: list) -> pd.DataFrame:
             # Annualised 6-month realised volatility (std of daily returns × √252)
             vol_6m = prices.iloc[-cfg.LOOKBACK_6M:].pct_change().dropna().std() * np.sqrt(252)
 
+            # Distance above the 250-DMA (trend extension) — mirrors the backtester
+            dma_d    = prices.rolling(cfg.DMA_EXIT).mean().iloc[-1] if len(prices) >= cfg.DMA_EXIT else np.nan
+            dist_dma = (prices.iloc[-1] / dma_d - 1) if (dma_d and not np.isnan(dma_d)) else 0.0
+
             records.append({
                 "ticker" : t,
                 "sector" : UNIVERSE.get(t, "Unknown"),
@@ -429,6 +433,7 @@ def compute_scores(close: pd.DataFrame, tickers: list) -> pd.DataFrame:
                 "mom_6m" : mom_6m,
                 "mom_3m" : mom_3m,
                 "vol_6m" : vol_6m,
+                "dist_dma": dist_dma,
             })
         except Exception:
             continue    # skip any stock with insufficient or malformed data
@@ -442,16 +447,18 @@ def compute_scores(close: pd.DataFrame, tickers: list) -> pd.DataFrame:
     # This makes all factors comparable regardless of their raw scale
     def z(s): return (s - s.mean()) / s.std() if s.std() > 0 else s * 0
 
-    df["z_12m"] = z(df["mom_12m"])
-    df["z_6m"]  = z(df["mom_6m"])
-    df["z_3m"]  = z(df["mom_3m"])
-    df["z_vol"] = z(df["vol_6m"])
+    df["z_12m"]  = z(df["mom_12m"])
+    df["z_6m"]   = z(df["mom_6m"])
+    df["z_3m"]   = z(df["mom_3m"])
+    df["z_vol"]  = z(df["vol_6m"])
+    df["z_dist"] = z(df["dist_dma"])
 
     # Composite score: weighted sum of z-scored factors
     df["score"] = (cfg.W_MOM_12M * df["z_12m"] +
                    cfg.W_MOM_6M  * df["z_6m"]  +
                    cfg.W_MOM_3M  * df["z_3m"]  +
-                   cfg.W_VOL     * df["z_vol"])
+                   cfg.W_VOL     * df["z_vol"] +
+                   getattr(cfg, "W_DIST_DMA", 0.0) * df["z_dist"])
 
     return df.sort_values("score", ascending=False)    # rank best to worst
 
@@ -462,9 +469,24 @@ def compute_scores(close: pd.DataFrame, tickers: list) -> pd.DataFrame:
 # subject to the sector concentration cap (MAX_PER_SECTOR).
 # Equal-weighted — each selected stock gets 1/N of capital.
 # ─────────────────────────────────────────────
-def select_portfolio(scored: pd.DataFrame) -> pd.DataFrame:
+def _entry_above_dma(close, ticker) -> bool:
+    """True if the stock is at/above its DMA_EXIT moving average. This is the
+    ENTRY gate — it matches the backtester's pick_portfolio so the live selector
+    and the backtest simulate the same strategy (don't initiate downtrending names)."""
+    if close is None or ticker not in close.columns:
+        return True
+    p = close[ticker].dropna()
+    if len(p) < cfg.DMA_EXIT:
+        return True
+    return p.iloc[-1] >= p.rolling(cfg.DMA_EXIT).mean().iloc[-1]
+
+
+def select_portfolio(scored: pd.DataFrame, close: pd.DataFrame = None) -> pd.DataFrame:
     selected, sc = [], {}     # selected = chosen tickers, sc = sector counts
     for ticker, row in scored.iterrows():
+        # Entry gate: skip names below their DMA_EXIT (matches the backtester)
+        if not _entry_above_dma(close, ticker):
+            continue
         s = row["sector"]
         # Only include this stock if its sector isn't already at the cap
         if sc.get(s, 0) < cfg.MAX_PER_SECTOR:
@@ -472,6 +494,8 @@ def select_portfolio(scored: pd.DataFrame) -> pd.DataFrame:
             sc[s] = sc.get(s, 0) + 1
         if len(selected) == cfg.TOP_N:
             break     # reached the target portfolio size
+    if not selected:
+        return pd.DataFrame()
     port = scored.loc[selected].copy()
     port["weight"] = 1.0 / len(port)    # equal weight for each selected stock
     return port
@@ -611,7 +635,7 @@ def run_signals(current_holdings: list = []) -> dict:
         return {"regime": regime, "portfolio": pd.DataFrame(), "exits": [], "strength": 1.0}
 
     # Select top N portfolio and check which held stocks should exit
-    portfolio = select_portfolio(scored)
+    portfolio = select_portfolio(scored, close)
     exits     = check_exit_signals(close, scored, current_holdings)
 
     return {"regime": regime, "portfolio": portfolio, "exits": exits, "strength": strength}

@@ -6,3 +6,14 @@ __pycache__/
 *_cache.csv
 equity_curve*.csv
 trade_log*.csv
+
+# NSE bhavcopy archive (large, regenerable)
+nse_data/raw/
+
+# generated analysis outputs
+trades_master.csv
+optimize_results.csv
+optimize_results.csv.prev
+nse_data/*.log
+nse_data/.build_ok
+nse_data/.build_done
