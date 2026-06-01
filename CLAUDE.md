@@ -49,9 +49,9 @@ scheduler.py          ← thin cron wrapper: kite_login → update_cache → run
 backtester.py         ← walk-forward India backtest (daily exits + monthly rotation)
 universe_history.csv  ← point-in-time Nifty LargeMidCap 250 membership (anti-survivorship)
 
-tools/                ← infrequently-run utilities & docs
+tools/                ← infrequently-run universe-maintenance utilities
   build_universe_history.py ← rebuilds universe_history.csv from nse_snapshots/
-  DATA_FIX.md         ← notes on data-quality fixes (survivorship, stale universe)
+  merge_constituents.py     ← merges dated constituent files into universe_history.csv
 
 nse_data/             ← survivorship-bias-free price cache from NSE bhavcopy
   download.py         ← fetch raw daily bhavcopy (equity + index), resumable
@@ -127,14 +127,14 @@ In paper mode, orders are logged to `orders.log` but nothing touches Zerodha. Li
 - `scheduler.log` — append-only cron run log
 - `price_data_cache.csv`, `volume_data_cache.csv`, `open_data_cache.csv`, `regime_data_cache.csv` — yfinance data cache (safe to delete to force full re-download); also used live
 - `nse_data/price_cache.csv`, `open_cache.csv`, `volume_cache.csv`, `regime_cache.csv`, `splits.csv`, `adjustments_report.csv` — bias-free backtest cache (regenerate via `nse_data/build_caches.py`)
-- `nse_data/raw/` — downloaded bhavcopy archive (git-ignored, large, regenerable)
+- `nse_data/raw/` — bhavcopy download dir (git-ignored; created on demand by `download.py`, deleted after the cache is built)
 - `equity_curve_daily.csv`, `trade_log_daily.csv` — backtest output files
 - `backups/` — auto-created daily backups of `current_holdings.json`, last 7 days kept
 
 ## Universe
 
 - **Live** (`signals.py` `UNIVERSE` dict, `data_manager.py` `UNIVERSE_TICKERS` list) must stay in sync; update **both** if you add/remove tickers.
-- **Backtest** uses `universe_history.csv` (point-in-time membership) when present, which is what removes survivorship bias from universe selection; it falls back to the hardcoded `UNIVERSE` dict in `backtester.py` only if that file is missing. `universe_history.csv` is stale after 2020-07-31 — see `tools/DATA_FIX.md`.
+- **Backtest** uses `universe_history.csv` (point-in-time membership) when present, which is what removes survivorship bias from universe selection; it falls back to the hardcoded `UNIVERSE` dict in `backtester.py` only if that file is missing. `universe_history.csv` is stale after 2020-07-31 — extend it via `tools/merge_constituents.py` (see `nse_data/README.md`).
 
 ## Dependencies
 

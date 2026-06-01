@@ -11,13 +11,22 @@ Edit numbers here — signals.py and backtester.py import from here.
 # ─────────────────────────────────────────────
 
 # Number of stocks held simultaneously in the portfolio
-TOP_N            = 10
+TOP_N            = 15
 
 # Maximum stocks from any single sector — prevents sector concentration
-MAX_PER_SECTOR   = 4
+MAX_PER_SECTOR   = 5
 
 # Sell a held stock if its momentum rank drops below this threshold in the universe
-EXIT_RANK_CUTOFF = 25
+EXIT_RANK_CUTOFF = 35
+
+# Rebalance cadence for the full rotation (sell non-top-N + refill to top-N):
+#   "monthly" | "weekly" | "2x-week" | "none" (build once, then only exit-driven turnover)
+REBALANCE_FREQ   = "monthly"
+
+# Rank-velocity exit: sell if a holding falls more than RANK_DROP_EXIT positions
+# vs its rank RANK_DROP_LOOKBACK trading days ago. 0 = off.
+RANK_DROP_EXIT     = 0
+RANK_DROP_LOOKBACK = 3
 
 # Position sizing at the monthly rebalance:
 #   "equal"  → 1/N each
@@ -27,7 +36,7 @@ EXIT_RANK_CUTOFF = 25
 #              redistributed by the same weights.
 POSITION_WEIGHTING = "tiered"
 # Tier multipliers for ranks [top 5] / [6–12] / [rest], normalised across the held set.
-RANK_TIER_WEIGHTS  = (1.5, 1.1, 0.7)
+RANK_TIER_WEIGHTS  = (1.3, 1.0, 0.8)
 
 
 # ─────────────────────────────────────────────
@@ -37,11 +46,11 @@ RANK_TIER_WEIGHTS  = (1.5, 1.1, 0.7)
 # so absolute scale has no effect on stock rankings.
 # ─────────────────────────────────────────────
 
-W_MOM_12M   = 0.60    # 12-month momentum weight — strongest predictor
-W_MOM_6M    = 0.45    # 6-month momentum weight — medium-term trend
-W_MOM_3M    = 0.30    # 3-month momentum weight — short-term trend
+W_MOM_12M   = 0.40    # 12-month momentum weight (optimizer: tilt down toward 6M)
+W_MOM_6M    = 0.50    # 6-month momentum weight — medium-term trend (optimizer favored)
+W_MOM_3M    = 0.20    # 3-month momentum weight — short-term trend
 W_VOL       = 0    # volatility penalty — set negative to penalise high-vol stocks
-W_DIST_DMA  = 0.20    # weight on z-scored distance above the 250-DMA (trend extension).
+W_DIST_DMA  = 0.30    # weight on z-scored distance above the 250-DMA (trend extension).
                       # Forensics: dist-above-DMA was the #2 separator of big winners. 0 = off.
 
 
@@ -56,13 +65,20 @@ LOOKBACK_3M     = 80    # ~3 months of trading days
 
 # How many of the most recent days to skip before measuring momentum.
 # Skipping ~1 month avoids short-term reversal (stocks that just ran up tend to pull back).
-SKIP_RECENT     = 20
+SKIP_RECENT     = 25
 
 # Number of days for the Nifty 500 moving average used to determine market regime
 REGIME_DMA      = 200
 
 # Exit a stock if its price falls below this many-day moving average (trend breakdown)
-DMA_EXIT        = 200
+DMA_EXIT        = 250
+# Master switch for the 250-DMA trend filter (both the entry gate AND the exit).
+# False = the DMA plays no role (the dist_dma SCORING factor is separate & unaffected).
+USE_DMA         = True
+
+# Hard stop-loss: sell if a position is down this fraction from its avg cost.
+# 0 = off (the 250-DMA is then the only, loose, trend stop).
+STOP_LOSS_PCT   = 0.0
 
 
 # ─────────────────────────────────────────────
@@ -72,7 +88,8 @@ DMA_EXIT        = 200
 # ─────────────────────────────────────────────
 
 MIN_PRICE           = 0    # ₹ minimum stock price (0 = off)
-MIN_AVG_VALUE_CR    = 0.1    # crore — minimum 60-day avg traded value (0 = off)
+MIN_AVG_VALUE_CR    = 1.0    # crore — min 60-day avg traded value (1.0 for live tradability;
+                             # optimizer wanted 0.1 but sub-1cr names aren't realistically tradable)
 
 # "Flat" / stale-price filter. The bias-free cache forward-fills non-trading days,
 # so a suspended or delisted name can appear as a flat line (and, if it ran up
@@ -157,14 +174,14 @@ SELL_BUFFER     = 0.010   # 1% below close on sell orders (ensures fill)
 # Date range and starting capital for backtester.py simulations.
 # ─────────────────────────────────────────────
 
-START_DATE      = "2009-01-01"   # First date the backtest places orders.
+START_DATE      = "2018-01-01"   # First date the backtest places orders.
                                  # Bias-free cache now extends back to 2005-01, so
                                  # the 305-day momentum warmup is satisfied by 2006
                                  # data and trading begins cleanly in Jan 2007 —
                                  # capturing the FULL 2008 GFC peak-to-trough
                                  # (the earlier 2007-10 start started mid-warmup,
                                  #  leaving 2008 only half-tested).
-END_DATE        = "2020-07-31"   # Last date included in the backtest
+END_DATE        = "2020-12-31"   # Last date included in the backtest
 INITIAL_CAPITAL = 100000         # ₹1 lakh starting capital
 RISK_FREE_RATE  = 0.065          # 6.5% — India 10-year G-Sec, used for Sharpe/Sortino
 
@@ -210,7 +227,7 @@ FORCE_RISK_ON   = False
 # MUST be False for a realistic backtest — the regime filter is the strategy's
 # main drawdown defense and has to be exercised over 2008/2020/2022. This is the
 # INTENDED strategy; only flip to True to study an always-invested variant.
-BACKTEST_FORCE_RISK_ON = True
+BACKTEST_FORCE_RISK_ON = True   # regime filter OFF — always invested (the 16.7%/-60% max-return profile)
 
 # Emergency kill switch — set True to immediately stop all trading and signal processing
 TRADING_HALTED  = False

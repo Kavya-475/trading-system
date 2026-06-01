@@ -573,6 +573,8 @@ def get_regime_strength(nifty500, nifty100, nifty_mid, date) -> float:
     return max(0.0, min(1.0, fraction))
 
 def is_above_exit_dma(close, ticker, date):
+    if not getattr(cfg, "USE_DMA", True):     # DMA filter off → no entry gate
+        return True
     if ticker not in close.columns:
         return True
     p = close[ticker].loc[:date].dropna()
@@ -795,8 +797,8 @@ def load_universe_history():
               f"(frozen membership → residual survivorship bias):")
         for a, b, d in gaps[:5]:
             print(f"     {a} → {b}  ({d}d, ~{d//182} missed rebalances)")
-        print( "   Fill with semi-annual constituent files via tools/build_universe_history.py "
-               "(see tools/DATA_FIX.md).")
+        print( "   Fill with semi-annual constituent files via tools/merge_constituents.py "
+               "(see nse_data/README.md).")
     return history
 
 
@@ -999,8 +1001,9 @@ def run_backtest(save=True):
     cached_scored        = pd.DataFrame()
     cached_top_25        = []
     cached_portfolio     = []
+    rank_hist            = []     # per-day {ticker: rank} for the rank-velocity exit
     in_risk_off          = False
-    last_rebalance_month = None   # month comparison — avoids type mismatch bug
+    last_rebalance_period = None  # cadence comparison (see REBALANCE_FREQ)
 
     print(f"\n{'='*55}")
     print(f"  BACKTEST [DAILY EXITS]  |  {cfg.START_DATE} → {cfg.END_DATE}")
@@ -1014,9 +1017,18 @@ def run_backtest(save=True):
         date_str    = pd.Timestamp(day).strftime("%Y-%m-%d")
         di          = date_to_di.get(day)          # integer index into full_close / score_mat
         next_day    = all_days_list[day_idx + 1] if day_idx + 1 < len(all_days_list) else day
-        cur_month    = pd.Timestamp(day).to_period("M")
-        # First trading day of each month = month changed since last rebalance
-        is_rebalance = (cur_month != last_rebalance_month)
+        # Rebalance cadence (cfg.REBALANCE_FREQ): "monthly" | "weekly" | "2x-week" | "none"
+        _freq = getattr(cfg, "REBALANCE_FREQ", "monthly")
+        _d    = pd.Timestamp(day); _iso = _d.isocalendar()
+        if _freq == "weekly":
+            rebal_period = (_iso[0], _iso[1])                      # first trading day of each ISO week
+        elif _freq in ("2x-week", "biweekly", "twice"):
+            rebal_period = (_iso[0], _iso[1], _d.weekday() >= 3)   # Mon–Wed vs Thu–Fri ≈ twice/week
+        elif _freq == "none":
+            rebal_period = "once"                                 # build once, then never rotate
+        else:
+            rebal_period = _d.to_period("M")                      # monthly (default)
+        is_rebalance = (rebal_period != last_rebalance_period)
 
         # ── IDLE-CASH INTEREST (daily accrual on the cash balance) ──────────
         if daily_cash_rate and cash > 0:
@@ -1102,9 +1114,11 @@ def run_backtest(save=True):
             cached_top_25    = ranked[:cfg.EXIT_RANK_CUTOFF]
             cached_portfolio = pick_portfolio(cached_scored, close, day)
         else:
+            ranked           = []
             cached_scored    = pd.DataFrame()
             cached_top_25    = []
             cached_portfolio = []
+        rank_hist.append({tk: i for i, tk in enumerate(ranked)})   # today's ranks (rank-velocity exit)
 
         # ── DAILY EXIT CHECK ─────────────────────────────────────────────────
         # Check every current holding against exit rules using today's prices
@@ -1118,10 +1132,27 @@ def run_backtest(save=True):
             if cached_top_25 and t not in cached_top_25:
                 exit_reason = "rank"
 
-            # Rule 2: price below DMA_EXIT (checked with today's price)
+            # Rule 2: price below DMA_EXIT (checked with today's price) — if enabled
             ti = t_to_i.get(t)
-            if ti is not None and di is not None and not above_dma[di, ti]:
+            if getattr(cfg, "USE_DMA", True) and ti is not None and di is not None and not above_dma[di, ti]:
                 exit_reason = f"{cfg.DMA_EXIT}DMA"
+
+            # Rule 3: hard stop-loss — position down >= STOP_LOSS_PCT from avg cost
+            slp = getattr(cfg, "STOP_LOSS_PCT", 0.0)
+            if slp > 0 and lots.get(t):
+                tot = sum(s for s, _, _ in lots[t])
+                avg = sum(s * p for s, p, _ in lots[t]) / tot if tot else 0.0
+                px  = get_price(close, t, day)
+                if avg > 0 and px > 0 and (px / avg - 1.0) <= -slp:
+                    exit_reason = "stop"
+
+            # Rule 4: rank-velocity — fell > RANK_DROP_EXIT ranks vs RANK_DROP_LOOKBACK days ago
+            dexit = getattr(cfg, "RANK_DROP_EXIT", 0)
+            lb    = getattr(cfg, "RANK_DROP_LOOKBACK", 3)
+            if dexit and len(rank_hist) > lb:
+                rnow, rprev = rank_hist[-1].get(t), rank_hist[-1 - lb].get(t)
+                if rnow is not None and rprev is not None and (rnow - rprev) > dexit:
+                    exit_reason = "rankvel"
 
             if exit_reason:
                 exits.append((t, exit_reason))
@@ -1152,13 +1183,12 @@ def run_backtest(save=True):
                         "shares":sh,"price":fill_px,"value":proceeds,"cost":cost,"tax":tax
                     })
 
-        # Immediately find and buy replacements for what actually sold
+        # Immediately find and buy replacements for what actually sold.
+        # NOTE: same-day re-entry of a just-sold name is now ALLOWED (the
+        # exited-today guard was removed by request) — find_replacement will pick
+        # it again if it's still top-ranked and above its DMA.
         if sold and not cached_scored.empty:
             replacements = find_replacement(cached_scored, current_held, sold, close, day, cur_universe)
-            # Never re-buy a stock that was exited TODAY (prevents same-day
-            # sell→rebuy churn from the ffilled-DMA vs traded-DMA inconsistency).
-            exited_today = {t for t, _ in exits}
-            replacements = [t for t in replacements if t not in exited_today]
 
             # Compute target allocation
             port_val = cash
@@ -1307,7 +1337,7 @@ def run_backtest(save=True):
                 for t in held
             )
             print(f"{date_str} | RISK-ON   | ₹{port_val:>12,.0f} | {', '.join(held[:7])}")
-            last_rebalance_month = cur_month
+            last_rebalance_period = rebal_period
 
         # NOTE: daily NAV is recorded at the TOP of the loop (pre-trade) so that
         # trades filling at next-day open are reflected in tomorrow's equity, not
@@ -1359,8 +1389,7 @@ def run_backtest(save=True):
         print(f"\nSaved: equity_curve_daily.csv  |  trade_log_daily.csv")
         print(f"Total trades executed: {len(trade_log)}")
 
-    # Return key metrics so callers (e.g. tools/optimize.py) can score a run
-    # without parsing stdout. Uses the SAME current backtester — no re-implementation.
+    # Return key metrics so external drivers can score a run without parsing stdout.
     return {
         "cagr":     m_s["cagr"],   "sharpe":  m_s["sharpe"], "sortino": m_s["sortino"],
         "maxdd":    m_s["maxdd"],  "winrate": m_s["winrate"],
