@@ -14,6 +14,9 @@ nse_data/raw/
 trades_master.csv
 optimize_results.csv
 optimize_results.csv.prev
+wfo_results.csv
+wfo_results.csv.prev
+wfo_top50.csv
 nse_data/*.log
 nse_data/.build_ok
 nse_data/.build_done
