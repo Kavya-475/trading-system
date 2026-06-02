@@ -34,3 +34,14 @@ current_holdings.json.prereplay.bak
 
 # paper ledger (per-deployment state)
 paper_state.json
+
+wfo_struct_results.csv
+wfo_struct_results.csv.prev
+wfo_struct_top.csv
+
+wfo_lb_results.csv
+wfo_lb_results.csv.prev
+wfo_lb_top.csv
+
+surface_results.csv
+surface.log
