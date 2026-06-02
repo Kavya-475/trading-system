@@ -224,7 +224,7 @@ NSE_REGIME_CACHE = "nse_data/regime_cache.csv"
 # When True, overrides the regime filter so the strategy always stays invested.
 # Used during paper testing so we can observe signals even in RISK-OFF markets.
 # Set to False before going live.
-FORCE_RISK_ON   = False
+FORCE_RISK_ON   = True
 
 # Backtest-only override, decoupled from the live FORCE_RISK_ON above so that
 # changing backtest realism never alters live/paper execution behaviour.
