@@ -572,33 +572,36 @@ def _paper_telegram(holdings, close_px, state, fills, new_orders, regime):
     held = [t for t in holdings if get_shares(holdings, t) > 0]
     posval = sum(get_shares(holdings, t) * close_px.get(t, 0.0) for t in held)
     equity = cash + posval
+    net    = equity - cap                          # true net P&L (incl. all costs)
     unreal = sum((close_px.get(t, 0.0) - get_avg_price(holdings, t)) * get_shares(holdings, t)
                  for t in held if get_avg_price(holdings, t) > 0)
-    L = [f"{'📋' if PAPER_MODE else '✅'} *Paper — Daily Run*",
-         f"Date   : {date.today()}", f"Regime : {regime}", ""]
-    if fills:
-        L += ["*Confirmations (filled at today's open):*", *fills, ""]
     sells = [o for o in new_orders if o["side"] == "sell"]
     buys  = [o for o in new_orders if o["side"] == "buy"]
-    if sells:
-        L += ["*Working SELL orders (fill next open):*",
-              *[f"SELL {o['ticker']} ×{o['shares']} @ ≤₹{o['limit']}" for o in sells], ""]
-    if buys:
-        L += ["*Working BUY orders (fill next open):*",
-              *[f"BUY {o['ticker']} ×{o['shares']} @ ≤₹{o['limit']}" for o in buys], ""]
-    if not fills and not new_orders:
-        L += ["_No fills, no new orders today_", ""]
+
+    L = [f"{'📋 PAPER' if PAPER_MODE else '✅ LIVE'} — Daily Run · {date.today()}",
+         f"Regime: {regime}"]
+    if fills:
+        L += ["", "*Confirmed today (filled at open):*", *fills]
+
+    # Tomorrow's orders (placed today, fill at tomorrow's open)
+    L += ["", "*Tomorrow's SELL orders:*" + ("" if sells else " none")]
+    L += [f"  SELL {o['ticker']} ×{o['shares']} @ ≥₹{o['limit']:,.0f}" for o in sells]
+    L += ["*Tomorrow's BUY orders:*" + ("" if buys else " none")]
+    L += [f"  BUY  {o['ticker']} ×{o['shares']} @ ≤₹{o['limit']:,.0f}" for o in buys]
+
     if held:
-        L.append("*Holdings:*")
+        L += ["", f"*Holdings ({len(held)}):*"]
         for t in sorted(held, key=lambda t: -get_shares(holdings, t) * close_px.get(t, 0)):
             sh = get_shares(holdings, t); avg = get_avg_price(holdings, t); cur = close_px.get(t, 0)
-            pct = ((cur - avg) / avg * 100) if avg > 0 else 0.0
-            L.append(f"{'+' if cur >= avg else '-'} {t:<11} ×{sh} @ ₹{cur:.1f}  ({pct:+.1f}%)")
-        L.append("-" * 36)
-    L += [f"Cash      : ₹{cash:,.0f}",
-          f"Positions : ₹{posval:,.0f}",
-          f"*Equity*  : ₹{equity:,.0f}  ({(equity/cap - 1) * 100:+.2f}% vs ₹{cap:,.0f})",
-          f"Realized ₹{realized:+,.0f} | Unrealized ₹{unreal:+,.0f}"]
+            pnl = (cur - avg) * sh; pct = (pnl / (avg * sh) * 100) if avg > 0 else 0.0
+            L.append(f"  {t:<11} ×{sh:<4} @₹{cur:,.0f}  {pnl:+,.0f} ({pct:+.1f}%)")
+
+    L += ["", "─" * 24,
+          f"Cash:        ₹{cash:,.0f}",
+          f"Holdings:    ₹{posval:,.0f}",
+          f"*Total Value: ₹{equity:,.0f}*",
+          f"*Net P&L: ₹{net:+,.0f} ({net / cap * 100:+.2f}%)*",
+          f"  (realized ₹{realized:+,.0f} · unrealized ₹{unreal:+,.0f})"]
     return "\n".join(L)
 
 
