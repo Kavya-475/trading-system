@@ -46,11 +46,11 @@ RANK_TIER_WEIGHTS  = (1.3, 1.0, 0.8)
 # so absolute scale has no effect on stock rankings.
 # ─────────────────────────────────────────────
 
-W_MOM_12M   = 0.40    # 12-month momentum weight (optimizer: tilt down toward 6M)
-W_MOM_6M    = 0.50    # 6-month momentum weight — medium-term trend (optimizer favored)
-W_MOM_3M    = 0.20    # 3-month momentum weight — short-term trend
-W_VOL       = 0    # volatility penalty — set negative to penalise high-vol stocks
-W_DIST_DMA  = 0.30    # weight on z-scored distance above the 250-DMA (trend extension).
+W_MOM_12M   = 0.20    # 12-month momentum (multi-period optimizer: light 12M is best)
+W_MOM_6M    = 0.30    # 6-month momentum — medium-term trend
+W_MOM_3M    = 0.20    # 3-month momentum — short-term trend
+W_VOL       = -0.20   # volatility penalty — mild low-vol tilt (defensive ballast)
+W_DIST_DMA  = 0.50    # weight on z-scored distance above the 250-DMA (trend extension).
                       # Forensics: dist-above-DMA was the #2 separator of big winners. 0 = off.
 
 
@@ -178,14 +178,14 @@ SELL_BUFFER     = 0.010   # 1% below close on sell orders (ensures fill)
 # Date range and starting capital for backtester.py simulations.
 # ─────────────────────────────────────────────
 
-START_DATE      = "2007-01-01"   # First date the backtest places orders.
+START_DATE      = "2009-01-01"   # First date the backtest places orders.
                                  # Bias-free cache now extends back to 2005-01, so
                                  # the 305-day momentum warmup is satisfied by 2006
                                  # data and trading begins cleanly in Jan 2007 —
                                  # capturing the FULL 2008 GFC peak-to-trough
                                  # (the earlier 2007-10 start started mid-warmup,
                                  #  leaving 2008 only half-tested).
-END_DATE        = "2020-8-30"   # Last date included in the backtest
+END_DATE        = "2020-12-31"   # Last date included in the backtest
 INITIAL_CAPITAL = 100000         # ₹1 lakh starting capital
 RISK_FREE_RATE  = 0.065          # 6.5% — India 10-year G-Sec, used for Sharpe/Sortino
 
