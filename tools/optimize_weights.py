@@ -1,5 +1,5 @@
 """
-tools/optimize_weights.py  —  walk-forward search over the SCORING WEIGHTS
+tools/optimize_weights.py  —  multi-period search over the SCORING WEIGHTS
 ===========================================================================
 Extensively varies the five scoring weights only —
 
@@ -8,19 +8,18 @@ Extensively varies the five scoring weights only —
 — holding every other parameter at its config.py value, and drives the EXISTING
 backtester (backtester.run_backtest). No backtest logic is re-implemented.
 
-Walk-forward (what the user asked for)
---------------------------------------
-Each weight combo is run on TWO consecutive windows:
-  • TRAIN  : a 2-year window  (the "optimize for two years")
-  • FORWARD: the next 2 years (the "then run for 2" out-of-sample test)
-The combo's TRAIN numbers and its FORWARD numbers are both recorded, so you can
-see which combos that looked good in-sample actually held up forward. The final
-table is the **best 50 combos ranked by FORWARD return (CAGR)**, with the
-train→forward gap shown alongside (a big positive gap = overfit to the train).
+Multi-period robustness (what the user asked for)
+-------------------------------------------------
+Each weight combo is scored on SEVERAL disjoint windows that tile a span
+(default 2010→2020 as five 2-year periods: 2010-11, 2012-13, 2014-15, 2016-17,
+2018-19). Because every combo is grid-searched exhaustively, each window is an
+independent out-of-sample test of that combo — there is no "fit" step to overfit.
+A combo that scores well in ALL periods is regime-robust; one that only wins a
+single lucky period is not. The combo's per-window CAGR is recorded, plus the
+mean, the worst (min) and the spread (std) across windows. The final table is the
+best 50 ranked by mean CAGR — re-sort by min_cagr for the strict maximin choice.
 
-Default windows are fully pre-2020 (bias-free bhavcopy era, before the stale
-post-2020 universe): TRAIN 2016-01-01→2017-12-31, FORWARD 2018-01-01→2019-12-31.
-Override with --train-start / --train-years / --test-years.
+    --start-year 2010 --end-year 2020 --window-years 2   (the default span)
 
 Throughput (the "max backtests in 12h" ask)
 --------------------------------------------
@@ -29,23 +28,21 @@ Throughput (the "max backtests in 12h" ask)
   • SCALE-DEDUP: a momentum score is rank-invariant to multiplying *all* weights
     by a positive constant, so (0.4,0.5,0.2,0,0.3) and (0.8,1.0,0.4,0,0.6) give
     the identical portfolio. Combos are collapsed to a canonical (L1-normalised)
-    key so no two redundant, rank-equivalent backtests are ever run — every
-    backtest in the budget is informationally distinct.
+    key so no two rank-equivalent backtests are ever run.
   • SELF-SIZING: times a warm run, reads the core count, and runs the whole
     deduped grid if it fits the budget, else a random sample that does.
   • Streams each result to wfo_results.csv as it lands; reports partials on Ctrl-C.
 
 Run on the VM (12-hour budget, all cores):
     python tools/optimize_weights.py --budget 43200
-
-    python tools/optimize_weights.py --train-start 2014-01-01            # different fold
-    python tools/optimize_weights.py --objective fwd_sharpe              # rank by risk-adj
-    python tools/optimize_weights.py --report-only                       # re-print tables
+    python tools/optimize_weights.py --objective min_cagr      # rank by worst period
+    python tools/optimize_weights.py --report-only             # re-print tables
 """
 import argparse
 import contextlib
 import os
 import random
+import statistics
 import sys
 import time
 import multiprocessing as mp
@@ -57,9 +54,9 @@ sys.path.insert(0, HERE)
 OUT   = os.path.join(HERE, "wfo_results.csv")
 TOP50 = os.path.join(HERE, "wfo_top50.csv")
 
-# Filled in by main() from CLI args, read by the workers.
-TRAIN = ("2016-01-01", "2017-12-31")
-FWD   = ("2018-01-01", "2019-12-31")
+# Filled in by main() from CLI args, read by the workers. Each entry:
+#   (label, start_date, end_date)   e.g. ("2010-11", "2010-01-01", "2011-12-31")
+WINDOWS = []
 
 # ── Weight search space (fine grid; everything else stays at config.py) ──────
 SPACE = {
@@ -84,8 +81,7 @@ def canon_key(c):
 
 def build_grid():
     """Full grid, minus (a) all-momentum-zero combos (no trend signal) and
-    (b) scale-duplicates collapsed by canonical key. Returns one representative
-    combo per distinct portfolio."""
+    (b) scale-duplicates collapsed by canonical key."""
     import itertools
     seen, out = set(), []
     for vals in itertools.product(*(SPACE[p] for p in PARAMS)):
@@ -100,9 +96,22 @@ def build_grid():
     return out
 
 
-def _worker_init():
-    """Memoize the (weight-independent) data load: each worker reads the cache
-    exactly once, not once per combo."""
+def make_windows(start_year, end_year, win):
+    """Disjoint consecutive windows tiling [start_year, end_year)."""
+    out, y = [], start_year
+    while y + win <= end_year:
+        out.append((f"{y}-{(y + win - 1) % 100:02d}",
+                    f"{y}-01-01", f"{y + win - 1}-12-31"))
+        y += win
+    return out
+
+
+def _worker_init(windows):
+    """Set the windows in this worker (spawn re-imports the module with WINDOWS
+    empty, so it must be passed in), and memoize the weight-independent data load
+    so each worker reads the cache exactly once, not once per combo."""
+    global WINDOWS
+    WINDOWS = windows
     import backtester as bt
     orig, cache = bt.load_data, {}
     def cached():
@@ -113,20 +122,24 @@ def _worker_init():
 
 
 def evaluate(combo):
-    """Run the CURRENT backtester on the train + forward windows for one combo."""
+    """Run the CURRENT backtester on every window for one combo."""
     import config as cfg, backtester as bt
     for k, v in combo.items():
         setattr(cfg, k, v)
-    row = dict(combo)
+    row, cagrs = dict(combo), []
     try:
-        for tag, (s, e) in (("tr", TRAIN), ("fwd", FWD)):
+        for label, s, e in WINDOWS:
             cfg.START_DATE, cfg.END_DATE = s, e
             with open(os.devnull, "w") as dn, contextlib.redirect_stdout(dn), \
                     contextlib.redirect_stderr(dn):
                 m = bt.run_backtest(save=False)
-            for kk, vv in m.items():
-                row[f"{tag}_{kk}"] = round(float(vv), 6)
-        row["gap_cagr"] = round(row["tr_cagr"] - row["fwd_cagr"], 6)  # overfit tell
+            row[f"cagr_{label}"] = round(float(m["cagr"]), 6)
+            row[f"shrp_{label}"] = round(float(m["sharpe"]), 6)
+            row[f"mdd_{label}"]  = round(float(m["maxdd"]), 6)
+            cagrs.append(float(m["cagr"]))
+        row["mean_cagr"] = round(sum(cagrs) / len(cagrs), 6)
+        row["min_cagr"]  = round(min(cagrs), 6)
+        row["std_cagr"]  = round(statistics.pstdev(cagrs) if len(cagrs) > 1 else 0.0, 6)
         row["ok"] = 1
     except Exception as ex:                                          # noqa: BLE001
         row["ok"], row["err"] = 0, str(ex)[:160]
@@ -134,8 +147,8 @@ def evaluate(combo):
 
 
 def calibrate():
-    """Warm per-combo time (seconds) after one data load — both windows."""
-    _worker_init()
+    """Warm per-combo time (seconds) after one data load — all windows."""
+    _worker_init(WINDOWS)
     base = {p: SPACE[p][1] for p in PARAMS}     # a non-degenerate combo
     evaluate(base)                              # warm-up pays the data load
     t0 = time.time()
@@ -156,16 +169,16 @@ def report(objective):
     top = df.head(50)
     top.to_csv(TOP50, index=False)
 
-    show = PARAMS + ["tr_cagr", "fwd_cagr", "gap_cagr", "fwd_sharpe",
-                     "fwd_maxdd", "fwd_edge_cagr", "fwd_calmar"]
+    win_cols = [c for c in df.columns if c.startswith("cagr_")]
+    show = PARAMS + win_cols + ["mean_cagr", "min_cagr", "std_cagr"]
     show = [c for c in show if c in df.columns]
-    print("\n" + "=" * 96)
+    print("\n" + "=" * 110)
     print(f"  BEST 50 weight combos by {objective}   "
-          f"(of {len(df)} distinct portfolios evaluated)")
-    print(f"  TRAIN {TRAIN[0]}→{TRAIN[1]}   FORWARD {FWD[0]}→{FWD[1]}   "
-          f"gap_cagr = train−forward (large + = overfit)")
-    print("=" * 96)
-    with pd.option_context("display.width", 240, "display.max_columns", 60,
+          f"(of {len(df)} distinct portfolios × {len(win_cols)} periods)")
+    print("  per-period CAGR  |  mean = avg return across periods  |  "
+          "min = worst period (robustness)")
+    print("=" * 110)
+    with pd.option_context("display.width", 260, "display.max_columns", 80,
                            "display.float_format", lambda x: f"{x:.4f}"):
         print(top[show].to_string(index=False))
 
@@ -176,63 +189,51 @@ def report(objective):
     print(f"\n  Full results: {OUT}\n  Best 50 CSV : {TOP50}")
 
 
-def _shift_years(d, n):
-    y, m, day = (int(x) for x in d.split("-"))
-    return f"{y + n:04d}-{m:02d}-{day:02d}"
-
-
 def main():
-    global TRAIN, FWD
+    global WINDOWS
     ap = argparse.ArgumentParser()
     ap.add_argument("--budget", type=float, default=43200, help="time budget, seconds (default 12h)")
     ap.add_argument("--workers", type=int, default=max(1, mp.cpu_count()))
-    ap.add_argument("--objective", default="fwd_cagr",
-                    help="fwd_cagr | fwd_sharpe | fwd_calmar | fwd_edge_cagr | fwd_sortino")
-    ap.add_argument("--train-start", default="2016-01-01")
-    ap.add_argument("--train-years", type=int, default=2)
-    ap.add_argument("--test-years",  type=int, default=2)
+    ap.add_argument("--objective", default="mean_cagr",
+                    help="mean_cagr | min_cagr | std_cagr (lower) | cagr_<label>")
+    ap.add_argument("--start-year", type=int, default=2010)
+    ap.add_argument("--end-year",   type=int, default=2020)
+    ap.add_argument("--window-years", type=int, default=2)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--report-only", action="store_true")
     args = ap.parse_args()
 
-    ts = args.train_start
-    te = _shift_years(ts, args.train_years)            # exclusive boundary →
-    fe = _shift_years(te, args.test_years)
-    # windows are inclusive end-dates one day before the next window starts
-    def _minus1d(d):
-        from datetime import datetime, timedelta
-        return (datetime.strptime(d, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
-    TRAIN = (ts, _minus1d(te))
-    FWD   = (te, _minus1d(fe))
+    WINDOWS = make_windows(args.start_year, args.end_year, args.window_years)
+    if not WINDOWS:
+        sys.exit("No windows — check --start-year/--end-year/--window-years.")
 
     if args.report_only:
         report(args.objective); return
 
     grid = build_grid()
     print(f"Distinct portfolios in grid (after scale-dedup): {len(grid):,}")
+    print(f"Periods ({len(WINDOWS)}): " + "  ".join(f"{s[:4]}–{e[:4]}" for _, s, e in WINDOWS))
     print("Calibrating per-combo time on this machine…")
     sec = calibrate()
     capacity = int(args.budget * args.workers / sec * 0.90)
     if capacity >= len(grid):
-        combos = grid                                  # exhaustive — run them all
-        mode = "EXHAUSTIVE (whole grid fits the budget)"
+        combos, mode = grid, "EXHAUSTIVE (whole grid fits the budget)"
     else:
-        rng = random.Random(args.seed)
-        combos = rng.sample(grid, capacity)            # random subset that fits
+        combos = random.Random(args.seed).sample(grid, capacity)
         mode = f"RANDOM SAMPLE {capacity:,} of {len(grid):,} (budget-limited)"
 
-    print(f"  ~{sec:.1f}s/combo (train+forward) · {args.workers} workers · "
+    print(f"  ~{sec:.1f}s/combo ({len(WINDOWS)} periods) · {args.workers} workers · "
           f"budget {args.budget/3600:.1f}h")
     print(f"  → {mode}")
-    print(f"  TRAIN {TRAIN[0]}→{TRAIN[1]}  |  FORWARD {FWD[0]}→{FWD[1]}  |  "
-          f"rank by {args.objective}\n")
+    print(f"  rank by {args.objective}\n")
 
     if os.path.exists(OUT):
         os.replace(OUT, OUT + ".prev")
 
     done, t0, header = 0, time.time(), False
     try:
-        with mp.Pool(args.workers, initializer=_worker_init) as pool, open(OUT, "w") as fh:
+        with mp.Pool(args.workers, initializer=_worker_init, initargs=(WINDOWS,)) as pool, \
+                open(OUT, "w") as fh:
             for row in pool.imap_unordered(evaluate, combos, chunksize=1):
                 pd.DataFrame([row]).to_csv(fh, header=not header, index=False)
                 fh.flush(); header = True
