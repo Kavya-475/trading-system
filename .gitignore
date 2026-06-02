@@ -31,3 +31,6 @@ backups/
 
 # paper_replay one-off holdings backup
 current_holdings.json.prereplay.bak
+
+# paper ledger (per-deployment state)
+paper_state.json

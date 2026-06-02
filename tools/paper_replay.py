@@ -167,14 +167,24 @@ def main():
             print(f"    {o['side'].upper()} {o['ticker']} ×{o['shares']} limit {o['limit']}")
 
     if args.dry_run:
-        print("\n  --dry-run: current_holdings.json NOT modified.")
+        print("\n  --dry-run: current_holdings.json / paper_state.json NOT modified.")
     else:
+        import shutil
+        for o in final_pending:                       # tag with the placement day
+            o["placed"] = str(last_day.date())
         if os.path.exists(HOLDINGS_FILE):
-            import shutil
             shutil.copy(HOLDINGS_FILE, HOLDINGS_FILE + ".prereplay.bak")
         with open(HOLDINGS_FILE, "w") as f:
             json.dump(holdings, f, indent=2)
-        print(f"\n  Wrote {HOLDINGS_FILE} (backup: current_holdings.json.prereplay.bak)")
+        # Seed the live paper ledger so execution.py continues from the replay:
+        # the final day's orders become the working (pending) orders to confirm.
+        state_file = os.path.join(HERE, "paper_state.json")
+        with open(state_file, "w") as f:
+            json.dump({"capital": args.capital, "cash": round(cash, 2),
+                       "realized": round(realized, 2), "pending": final_pending,
+                       "last_date": str(last_day.date())}, f, indent=2)
+        print(f"\n  Wrote {HOLDINGS_FILE} (backup .prereplay.bak)\n  Wrote {state_file} "
+              f"(cash ₹{cash:,.0f}, {len(final_pending)} working orders)")
 
 
 if __name__ == "__main__":

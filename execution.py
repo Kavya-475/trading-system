@@ -29,6 +29,7 @@ import pandas as pd
 import config as cfg
 from signals import run_signals, UNIVERSE, compute_scores, apply_liquidity_filter
 from data_manager import load_for_signals
+import paper_engine as pe
 
 # ── Load secrets from .env file ─────────────────────────────────────────────
 # Must be called before any os.getenv() calls so the file values are available
@@ -536,6 +537,120 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
 #   4. If RISK-ON: process exits, buy replacements, run monthly rebalance
 #   5. Save updated holdings + send Telegram summary
 # ─────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# PAPER LEDGER (cash + open limit orders, confirmed at the next open)
+# Mirrors the backtester via paper_engine: orders placed at today's close fill
+# at the NEXT open, and a sell's freed cash funds buys only after it confirms.
+# State persists in paper_state.json: {capital, cash, realized, pending, last_date}.
+# ─────────────────────────────────────────────
+PAPER_STATE_FILE = "paper_state.json"
+
+
+def load_latest_opens() -> dict:
+    """Most recent open price per ticker from the open cache (fill reference)."""
+    if not os.path.exists(cfg.OPEN_CACHE):
+        return {}
+    o = pd.read_csv(cfg.OPEN_CACHE, index_col=0, parse_dates=True)
+    return {t: float(o[t].dropna().iloc[-1]) for t in o.columns if len(o[t].dropna())}
+
+
+def load_paper_state() -> dict:
+    s = {"capital": CAPITAL, "cash": CAPITAL, "realized": 0.0, "pending": [], "last_date": None}
+    if os.path.exists(PAPER_STATE_FILE):
+        with open(PAPER_STATE_FILE) as f:
+            s.update(json.load(f))
+    return s
+
+
+def save_paper_state(state: dict):
+    with open(PAPER_STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+
+
+def _paper_telegram(holdings, close_px, state, fills, new_orders, regime):
+    cash = state["cash"]; cap = state.get("capital", CAPITAL); realized = state.get("realized", 0.0)
+    held = [t for t in holdings if get_shares(holdings, t) > 0]
+    posval = sum(get_shares(holdings, t) * close_px.get(t, 0.0) for t in held)
+    equity = cash + posval
+    unreal = sum((close_px.get(t, 0.0) - get_avg_price(holdings, t)) * get_shares(holdings, t)
+                 for t in held if get_avg_price(holdings, t) > 0)
+    L = [f"{'📋' if PAPER_MODE else '✅'} *Paper — Daily Run*",
+         f"Date   : {date.today()}", f"Regime : {regime}", ""]
+    if fills:
+        L += ["*Confirmations (filled at today's open):*", *fills, ""]
+    sells = [o for o in new_orders if o["side"] == "sell"]
+    buys  = [o for o in new_orders if o["side"] == "buy"]
+    if sells:
+        L += ["*Working SELL orders (fill next open):*",
+              *[f"SELL {o['ticker']} ×{o['shares']} @ ≤₹{o['limit']}" for o in sells], ""]
+    if buys:
+        L += ["*Working BUY orders (fill next open):*",
+              *[f"BUY {o['ticker']} ×{o['shares']} @ ≤₹{o['limit']}" for o in buys], ""]
+    if not fills and not new_orders:
+        L += ["_No fills, no new orders today_", ""]
+    if held:
+        L.append("*Holdings:*")
+        for t in sorted(held, key=lambda t: -get_shares(holdings, t) * close_px.get(t, 0)):
+            sh = get_shares(holdings, t); avg = get_avg_price(holdings, t); cur = close_px.get(t, 0)
+            pct = ((cur - avg) / avg * 100) if avg > 0 else 0.0
+            L.append(f"{'+' if cur >= avg else '-'} {t:<11} ×{sh} @ ₹{cur:.1f}  ({pct:+.1f}%)")
+        L.append("-" * 36)
+    L += [f"Cash      : ₹{cash:,.0f}",
+          f"Positions : ₹{posval:,.0f}",
+          f"*Equity*  : ₹{equity:,.0f}  ({(equity/cap - 1) * 100:+.2f}% vs ₹{cap:,.0f})",
+          f"Realized ₹{realized:+,.0f} | Unrealized ₹{unreal:+,.0f}"]
+    return "\n".join(L)
+
+
+def run_execution_paper(holdings, close_px, signals):
+    """PAPER daily step. Confirm yesterday's open orders at today's open, then
+    place today's new limit orders via paper_engine (sells for rotations/exits;
+    buys deploy available cash), persist the ledger, and Telegram the result."""
+    state = load_paper_state()
+    opens = load_latest_opens()
+    today = str(date.today())
+
+    # 1. confirm yesterday's working orders at today's OPEN
+    fills, state["cash"], state["realized"], still = pe.fill_orders(
+        state.get("pending", []), opens, holdings, state["cash"], state["realized"], today)
+
+    # 2. decide target + size today's new orders
+    regime   = signals.get("regime", "RISK-ON")
+    strength = signals.get("strength", 1.0)
+    if cfg.FORCE_RISK_ON:
+        regime, strength = "RISK-ON", 1.0
+    exits  = signals.get("exits", [])
+    held   = [t for t in holdings if get_shares(holdings, t) > 0]
+    scored = pd.DataFrame()
+    if regime == "RISK-OFF":
+        top_n, sell_list = [], held
+    else:
+        close, volume = load_for_signals()
+        liquid = apply_liquidity_filter(close, volume, list(UNIVERSE.keys()))
+        scored = compute_scores(close, liquid)
+        port   = signals.get("portfolio")
+        top_n  = (port.index.tolist() if (port is not None and not port.empty)
+                  else (scored.head(cfg.TOP_N).index.tolist() if not scored.empty else []))
+        is_reb = is_rebalance_day() or len(held) == 0
+        sell_list = [t for t in held if t not in top_n] if is_reb else list(exits)
+
+    ranks = {t: i for i, t in enumerate(scored.index)} if not scored.empty else {}
+    cpx   = {t: close_px.get(t, 0.0) for t in set(top_n) | set(holdings)}
+    new_orders = pe.generate_orders(cpx, top_n, ranks, holdings, state["cash"],
+                                    sell_list=sell_list, strength=strength)
+    for o in new_orders:
+        o["placed"] = today
+    state["pending"], state["last_date"] = still + new_orders, today
+
+    # 3. persist + notify
+    save_holdings(holdings)
+    save_paper_state(state)
+    send_telegram(_paper_telegram(holdings, close_px, state, fills, new_orders, regime))
+    eq = state["cash"] + sum(get_shares(holdings, t) * close_px.get(t, 0.0) for t in held)
+    log.info(f"[PAPER] equity ₹{eq:,.0f} | cash ₹{state['cash']:,.0f} | "
+             f"working orders {len(state['pending'])} | held {len(held)}")
+
+
 def run_execution():
     if cfg.TRADING_HALTED:
         log.info("TRADING_HALTED flag set — aborting run")
@@ -565,6 +680,13 @@ def run_execution():
     # ── Run signal engine — regime + scores + exit signals ─────────────────
     log.info("Running signal engine...")
     signals        = run_signals(current_tickers)
+
+    # ── PAPER MODE → ledger engine (open-fill confirmation, cash tracking) ──
+    if PAPER_MODE:
+        run_execution_paper(holdings, latest_prices, signals)
+        log.info("=" * 55)
+        return
+
     strength       = signals.get("strength", 1.0)             # 0.0–1.0 from regime strength
     stocks_to_hold = max(1, round(cfg.TOP_N * strength))      # scale position count by strength
     regime         = signals["regime"]
