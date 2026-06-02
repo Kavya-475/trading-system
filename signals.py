@@ -526,7 +526,8 @@ def check_exit_signals(close: pd.DataFrame, scored: pd.DataFrame,
             try:
                 p        = close[t].dropna()
                 dma_exit = p.rolling(cfg.DMA_EXIT).mean().iloc[-1]   # e.g. 250-day moving average
-                if p.iloc[-1] < dma_exit:
+                # Exit only when >DMA_EXIT_BUFFER below the line (matches the backtester).
+                if p.iloc[-1] < dma_exit * (1 - getattr(cfg, "DMA_EXIT_BUFFER", 0.0)):
                     reason = f"below {cfg.DMA_EXIT}-DMA ({dma_exit:.0f})"
             except Exception:
                 pass    # if DMA can't be computed (insufficient history), don't exit

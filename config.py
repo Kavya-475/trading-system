@@ -17,7 +17,7 @@ TOP_N            = 15
 MAX_PER_SECTOR   = 5
 
 # Sell a held stock if its momentum rank drops below this threshold in the universe
-EXIT_RANK_CUTOFF = 35
+EXIT_RANK_CUTOFF = 50
 
 # Rebalance cadence for the full rotation (sell non-top-N + refill to top-N):
 #   "monthly" | "weekly" | "2x-week" | "none" (build once, then only exit-driven turnover)
@@ -72,6 +72,10 @@ REGIME_DMA      = 200
 
 # Exit a stock if its price falls below this many-day moving average (trend breakdown)
 DMA_EXIT        = 250
+# Buffer below the DMA before the EXIT fires: sell only when price is this fraction
+# below the DMA (0.02 = 2%). The entry gate stays strict (buy at/above DMA), so this
+# creates a hysteresis band that cuts DMA ping-pong churn. 0 = exit exactly at the line.
+DMA_EXIT_BUFFER = 0.0
 # Master switch for the 250-DMA trend filter (both the entry gate AND the exit).
 # False = the DMA plays no role (the dist_dma SCORING factor is separate & unaffected).
 USE_DMA         = True
@@ -174,14 +178,14 @@ SELL_BUFFER     = 0.010   # 1% below close on sell orders (ensures fill)
 # Date range and starting capital for backtester.py simulations.
 # ─────────────────────────────────────────────
 
-START_DATE      = "2018-01-01"   # First date the backtest places orders.
+START_DATE      = "2007-01-01"   # First date the backtest places orders.
                                  # Bias-free cache now extends back to 2005-01, so
                                  # the 305-day momentum warmup is satisfied by 2006
                                  # data and trading begins cleanly in Jan 2007 —
                                  # capturing the FULL 2008 GFC peak-to-trough
                                  # (the earlier 2007-10 start started mid-warmup,
                                  #  leaving 2008 only half-tested).
-END_DATE        = "2020-12-31"   # Last date included in the backtest
+END_DATE        = "2020-8-30"   # Last date included in the backtest
 INITIAL_CAPITAL = 100000         # ₹1 lakh starting capital
 RISK_FREE_RATE  = 0.065          # 6.5% — India 10-year G-Sec, used for Sharpe/Sortino
 

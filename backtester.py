@@ -937,7 +937,9 @@ def run_backtest(save=True):
 
     dma_vals  = pd.DataFrame(full_close, index=full_dates,
                              columns=valid_tickers).rolling(cfg.DMA_EXIT).mean().values
-    above_dma = full_close > dma_vals   # (N_all, S) bool — used for daily exit checks
+    # Exit fires only when price is more than DMA_EXIT_BUFFER below the DMA (hysteresis
+    # vs the strict entry gate) — cuts DMA ping-pong churn.
+    above_dma = full_close > dma_vals * (1 - getattr(cfg, "DMA_EXIT_BUFFER", 0.0))   # (N_all, S) bool — daily exit checks
     with np.errstate(invalid="ignore", divide="ignore"):
         dist_dma_mat = full_close / dma_vals - 1.0   # distance above the 250-DMA (trend extension)
 
