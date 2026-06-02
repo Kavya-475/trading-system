@@ -28,3 +28,6 @@ current_holdings.json
 orders.log
 scheduler.log
 backups/
+
+# paper_replay one-off holdings backup
+current_holdings.json.prereplay.bak
