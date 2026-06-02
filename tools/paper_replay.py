@@ -39,15 +39,12 @@ sys.path.insert(0, HERE)
 import config as cfg
 from signals import (UNIVERSE, compute_scores, apply_liquidity_filter,
                      select_portfolio, check_exit_signals, get_regime)
-from backtester import txn_cost
 from data_manager import load_for_signals, load_index_data
+import paper_engine as pe
 
 HOLDINGS_FILE = os.path.join(HERE, "current_holdings.json")
 
 
-def _buy_limit(px, rank):
-    b = cfg.BUY_BUFFER_TOP5 if rank < 5 else cfg.BUY_BUFFER_MID if rank < 12 else cfg.BUY_BUFFER_REST
-    return round(px * (1 + b), 1)
 
 
 def _last(df, t):
@@ -87,6 +84,8 @@ def main():
     universe = list(UNIVERSE.keys())
     holdings = {}            # ticker -> {shares, avg_price, entry_date}
     cash = args.capital
+    realized = 0.0           # cumulative realized P&L (after costs)
+    strength = 1.0           # binary regime → fully deployed when RISK-ON
     pending = []             # orders placed the prior day, fill at this day's open
     force_on = getattr(cfg, "FORCE_RISK_ON", False)
 
@@ -96,46 +95,11 @@ def main():
 
     final_pending = []
     for di, day in enumerate(days):
-        fills = []
-        # ── 1. fill yesterday's orders at TODAY's open ──────────────────────
-        for o in pending:
-            t = o["ticker"]
-            opx = float(open_df.loc[day, t]) if (day in open_df.index and t in open_df.columns
-                                                 and not pd.isna(open_df.loc[day, t])) else None
-            if opx is None:
-                fills.append(f"no-open {t} (no fill)"); continue
-            if o["side"] == "buy":
-                if opx <= o["limit"]:
-                    val = o["shares"] * opx
-                    tot = val + txn_cost(val, "buy")
-                    if cash >= tot:
-                        ex = holdings.get(t, {}).get("shares", 0)
-                        avg = holdings.get(t, {}).get("avg_price", 0.0)
-                        ns = ex + o["shares"]
-                        navg = (avg * ex + opx * o["shares"]) / ns if ex > 0 else opx
-                        holdings[t] = {"shares": ns, "avg_price": round(navg, 2),
-                                       "entry_date": holdings.get(t, {}).get("entry_date", str(day.date()))}
-                        cash -= tot
-                        fills.append(f"BUY  {t} ×{o['shares']} @ {opx:.1f}")
-                    else:
-                        fills.append(f"BUY  {t} skipped (cash ₹{cash:,.0f} < ₹{tot:,.0f})")
-                else:
-                    fills.append(f"BUY  {t} MISSED (open {opx:.1f} > limit {o['limit']:.1f})")
-            else:  # sell
-                if opx >= o["limit"]:
-                    sh = min(o["shares"], holdings.get(t, {}).get("shares", 0))
-                    if sh > 0:
-                        val = sh * opx
-                        cash += val - txn_cost(val, "sell")
-                        rem = holdings[t]["shares"] - sh
-                        if rem > 0:
-                            holdings[t]["shares"] = rem
-                        else:
-                            holdings.pop(t, None)
-                        fills.append(f"SELL {t} ×{sh} @ {opx:.1f}")
-                else:
-                    fills.append(f"SELL {t} MISSED (open {opx:.1f} < limit {o['limit']:.1f})")
-        pending = []
+        # ── 1. confirm yesterday's orders at TODAY's open (shared engine) ───
+        opens_today = {t: float(open_df.loc[day, t]) for t in open_df.columns
+                       if day in open_df.index and not pd.isna(open_df.loc[day, t])}
+        fills, cash, realized, pending = pe.fill_orders(
+            pending, opens_today, holdings, cash, realized, str(day.date()))
 
         # ── 2. rank as of TODAY's close (no look-ahead) ─────────────────────
         close_t = close[close.index <= day]
@@ -145,67 +109,42 @@ def main():
 
         mtm = sum(h["shares"] * _last(close_t, t) for t, h in holdings.items())
         pv = cash + mtm
-        orders = []
-
+        scored = pd.DataFrame()
         if regime == "RISK-OFF":
-            for t, h in holdings.items():
-                orders.append({"ticker": t, "side": "sell", "shares": h["shares"],
-                               "limit": round(_last(close_t, t) * (1 - cfg.SELL_BUFFER), 1)})
+            top_n, exits = [], []
+            sell_list = [t for t in holdings if pe.shares_of(holdings, t) > 0]
+            full = False
             decision = "RISK-OFF → liquidate"
         else:
             liquid = _quiet(apply_liquidity_filter, close_t, vol_t, universe)
             scored = _quiet(compute_scores, close_t, liquid)
             port = _quiet(select_portfolio, scored, close_t) if not scored.empty else pd.DataFrame()
-            topn = port.index.tolist() if not port.empty else []
+            top_n = port.index.tolist() if not port.empty else []
             exits = _quiet(check_exit_signals, close_t, scored, list(holdings)) if not scored.empty else []
-            # Force a full build on a rebalance day OR whenever the book is empty
-            # (mirrors execution.py: rebalance = is_rebalance_day() or len==0).
+            # Full rebuild on a rebalance day OR an empty book (mirrors execution.py).
             is_reb = (day.day <= 3 and day.weekday() < 5) or (not holdings)
-
-            to_sell = {t for t in holdings if t in exits}
             if is_reb:
-                to_sell |= {t for t in holdings if t not in topn}
-            for t in to_sell:
-                orders.append({"ticker": t, "side": "sell", "shares": holdings[t]["shares"],
-                               "limit": round(_last(close_t, t) * (1 - cfg.SELL_BUFFER), 1)})
+                sell_list = [t for t in holdings if t not in top_n]
+                buy_names = top_n                        # full rebuild to top-N
+                full = True
+            else:
+                sell_list = list(exits)                  # monitor: only exits
+                # replacements for the exits — best top-N names not held
+                buy_names = [t for t in top_n if pe.shares_of(holdings, t) == 0][:max(0, len(exits))]
+                full = False
+            decision = f"{regime} | {'REBAL' if is_reb else 'monitor'} | top{len(top_n)} | exits {exits or '-'}"
 
-            buy_list = topn if is_reb else [t for t in topn if t not in holdings][:max(0, len(exits))]
-
-            def _heldval(t):  # current value of a name we're NOT selling (0 if being sold)
-                return (holdings.get(t, {}).get("shares", 0) * _last(close_t, t)) if t not in to_sell else 0.0
-
-            order_sh = {}                                   # pass 1: equal target = pv / TOP_N
-            target = pv / max(1, cfg.TOP_N)
-            for t in buy_list:
-                px = _last(close_t, t)
-                if px <= 0 or px > target or _heldval(t) >= target * 0.95:
-                    continue
-                s = int((target - _heldval(t)) / px)
-                if s > 0:
-                    order_sh[t] = s
-            bought = [t for t in buy_list if t in order_sh]
-            if bought:                                      # pass 2: redistribute leftover cash
-                spent = sum(order_sh[t] * _last(close_t, t) for t in bought)
-                held_keep = sum(_heldval(t) for t in bought)
-                leftover = pv - held_keep - spent
-                if leftover > 500:
-                    t2 = (held_keep + spent + leftover) / len(bought)
-                    for t in bought:
-                        px = _last(close_t, t)
-                        cur = _heldval(t) + order_sh[t] * px
-                        if px <= t2 and cur < t2 * 0.95:
-                            add = int((t2 - cur) / px)
-                            if add > 0:
-                                order_sh[t] += add
-            for rank, t in enumerate(buy_list):
-                if t in order_sh:
-                    orders.append({"ticker": t, "side": "buy", "shares": order_sh[t],
-                                   "limit": _buy_limit(_last(close_t, t), rank)})
-            decision = f"{regime} | {'REBAL' if is_reb else 'monitor'} | top{len(topn)} | exits {exits or '-'}"
+        if regime == "RISK-OFF":
+            buy_names = []
+        ranks = {t: i for i, t in enumerate(scored.index)} if not scored.empty else {}
+        close_px = {t: _last(close_t, t) for t in set(top_n) | set(holdings)}
+        orders = pe.generate_orders(close_px, top_n, ranks, holdings, cash,
+                                    sell_list=sell_list, buy_names=buy_names,
+                                    full_rebuild=full, strength=strength)
 
         # orders placed on the last replay day fill BEYOND the window → report as pending
         if di < len(days) - 1:
-            pending = orders
+            pending = pending + orders          # still-working (from fill_orders) + new
         else:
             final_pending = orders
 
