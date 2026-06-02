@@ -71,6 +71,12 @@ def main():
     close, volume = load_for_signals()
     nifty500, _, _, _ = load_index_data()
     open_df = pd.read_csv(cfg.OPEN_CACHE, index_col=0, parse_dates=True)
+    # Sort + dedupe so date slicing is robust to unsorted / duplicated index rows
+    # (a freshly rebuilt cache can come back out of order).
+    close = close.sort_index(); close = close[~close.index.duplicated(keep="last")]
+    volume = volume.sort_index(); volume = volume[~volume.index.duplicated(keep="last")]
+    nifty500 = nifty500.sort_index(); nifty500 = nifty500[~nifty500.index.duplicated(keep="last")]
+    open_df = open_df.sort_index(); open_df = open_df[~open_df.index.duplicated(keep="last")]
 
     start = pd.Timestamp(args.start)
     end = pd.Timestamp(args.end) if args.end else close.index.max()
@@ -132,7 +138,9 @@ def main():
         pending = []
 
         # ── 2. rank as of TODAY's close (no look-ahead) ─────────────────────
-        close_t, vol_t, n5_t = close.loc[:day], volume.loc[:day], nifty500.loc[:day]
+        close_t = close[close.index <= day]
+        vol_t = volume[volume.index <= day]
+        n5_t = nifty500[nifty500.index <= day]
         regime = "RISK-ON" if force_on else _quiet(get_regime, n5_t)
 
         mtm = sum(h["shares"] * _last(close_t, t) for t, h in holdings.items())
