@@ -113,7 +113,6 @@ def main():
         if regime == "RISK-OFF":
             top_n, exits = [], []
             sell_list = [t for t in holdings if pe.shares_of(holdings, t) > 0]
-            full = False
             decision = "RISK-OFF → liquidate"
         else:
             liquid = _quiet(apply_liquidity_filter, close_t, vol_t, universe)
@@ -121,26 +120,16 @@ def main():
             port = _quiet(select_portfolio, scored, close_t) if not scored.empty else pd.DataFrame()
             top_n = port.index.tolist() if not port.empty else []
             exits = _quiet(check_exit_signals, close_t, scored, list(holdings)) if not scored.empty else []
-            # Full rebuild on a rebalance day OR an empty book (mirrors execution.py).
+            # Rebalance day (or empty book) → sell anything not in top_n (rotation);
+            # monitor day → sell only exits. Buys auto-deploy available cash.
             is_reb = (day.day <= 3 and day.weekday() < 5) or (not holdings)
-            if is_reb:
-                sell_list = [t for t in holdings if t not in top_n]
-                buy_names = top_n                        # full rebuild to top-N
-                full = True
-            else:
-                sell_list = list(exits)                  # monitor: only exits
-                # replacements for the exits — best top-N names not held
-                buy_names = [t for t in top_n if pe.shares_of(holdings, t) == 0][:max(0, len(exits))]
-                full = False
+            sell_list = ([t for t in holdings if t not in top_n] if is_reb else list(exits))
             decision = f"{regime} | {'REBAL' if is_reb else 'monitor'} | top{len(top_n)} | exits {exits or '-'}"
 
-        if regime == "RISK-OFF":
-            buy_names = []
         ranks = {t: i for i, t in enumerate(scored.index)} if not scored.empty else {}
         close_px = {t: _last(close_t, t) for t in set(top_n) | set(holdings)}
         orders = pe.generate_orders(close_px, top_n, ranks, holdings, cash,
-                                    sell_list=sell_list, buy_names=buy_names,
-                                    full_rebuild=full, strength=strength)
+                                    sell_list=sell_list, strength=strength)
 
         # orders placed on the last replay day fill BEYOND the window → report as pending
         if di < len(days) - 1:
