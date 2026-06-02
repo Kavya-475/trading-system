@@ -20,3 +20,11 @@ wfo_top50.csv
 nse_data/*.log
 nse_data/.build_ok
 nse_data/.build_done
+
+# Runtime / per-deployment state — MUST stay untracked so the live cron's writes
+# (holdings, logs, dated backups) don't block scheduler.py's `git pull` self-update.
+# Tracking these is what froze the VM on stale code for weeks (audit 2026-06).
+current_holdings.json
+orders.log
+scheduler.log
+backups/
