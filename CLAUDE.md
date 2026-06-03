@@ -29,7 +29,7 @@ Two data sources, selected by `USE_NSE_BHAVCOPY` in `config.py`:
 - **`False`** → yfinance cache (`price_data_cache.csv`, `volume_data_cache.csv`, `regime_data_cache.csv`). Fast, but **survivorship-biased** (yfinance only carries today's survivors) and the universe membership is whatever `universe_history.csv` holds.
 - **`True`** (default) → the **bias-free** cache under `nse_data/` built from NSE bhavcopy archives: includes delisted names, corporate-action-adjusted, point-in-time universe. This is the honest backtest. See `nse_data/README.md` to (re)build it.
 
-The backtest exercises the regime filter (`BACKTEST_FORCE_RISK_ON = False`), real STCG/LTCG tax settled annually, brokerage/STT/slippage, next-day-open fills with missed gap-ups, and idle-cash interest. It benchmarks against a same-universe equal-weight index and Nifty 50.
+The backtest exercises the regime filter (toggled by `BACKTEST_FORCE_RISK_ON` — **currently `True`, i.e. regime OFF / always-invested**, the higher-return / deeper-drawdown profile), real STCG/LTCG tax settled annually, brokerage/STT/slippage, next-day-open fills with missed gap-ups, and idle-cash interest. It benchmarks against a same-universe equal-weight index and Nifty 50.
 
 ## Running signals standalone
 
@@ -43,15 +43,22 @@ python signals.py          # reads cache, prints current top holdings and any ex
 config.py             ← single source of truth for ALL parameters
 data_manager.py       ← incremental cache management (yfinance → CSV)
 signals.py            ← signal engine (cache-only, zero network calls)
-execution.py          ← order placement via Kite Connect + Telegram alerts
+execution.py          ← order placement via Kite Connect + Telegram alerts (paper mode → paper_engine)
+paper_engine.py       ← shared paper-trading engine: cash ledger, next-open fills, sell→confirm→buy sequencing (mirrors backtester)
 kite_login.py         ← Playwright-based headless Kite login (TOTP auto-fill)
 scheduler.py          ← thin cron wrapper: kite_login → update_cache → run_execution
 backtester.py         ← walk-forward India backtest (daily exits + monthly rotation)
+blueshift_strategy.py ← Blueshift (QuantInsti) port, no regime filter (uncommitted/experimental)
 universe_history.csv  ← point-in-time Nifty LargeMidCap 250 membership (anti-survivorship)
 
-tools/                ← infrequently-run universe-maintenance utilities
+tools/                ← infrequently-run maintenance + research utilities
   build_universe_history.py ← rebuilds universe_history.csv from nse_snapshots/
   merge_constituents.py     ← merges dated constituent files into universe_history.csv
+  optimize_weights.py       ← multi-period walk-forward sweep of the 5 scoring weights (produced opt#7)
+  optimize_structural.py    ← Phase-1 sweep of TOP_N × MAX_PER_SECTOR × EXIT_RANK_CUTOFF
+  optimize_lookback.py      ← Phase-2 sweep of LOOKBACK_12M/6M/3M + SKIP_RECENT
+  holding_surface.py        ← 190-window entry→exit-year CAGR surface (run on the VM)
+  paper_replay.py           ← replays the paper engine over history for validation
 
 nse_data/             ← survivorship-bias-free price cache from NSE bhavcopy
   download.py         ← fetch raw daily bhavcopy (equity + index), resumable
@@ -63,34 +70,37 @@ nse_data/             ← survivorship-bias-free price cache from NSE bhavcopy
 **Data flow:** `data_manager` fetches from Yahoo Finance and writes CSVs → `signals` and `execution` read only from those CSVs — no live network calls during trading hours.
 
 **Rebalancing logic (two-tier):**
-- *Daily:* Check every holding against exit rules (rank dropout from top 25, price < 250 DMA, regime flip). On exit, immediately buy the best available replacement from the top 25.
+- *Daily:* Check every holding against exit rules (rank drops below `EXIT_RANK_CUTOFF` = 50, price < 250 DMA, regime flip). On exit, immediately buy the best available replacement from the top ranks.
 - *Monthly (day 1–3):* Full portfolio rotation — sell anything not in the new top N, buy the full top N.
-- *Immediate:* On RISK-OFF (Nifty 500 < 200 DMA), liquidate everything same day regardless of rebalance schedule.
+- *Immediate:* On RISK-OFF (Nifty 500 < 200 DMA), liquidate everything same day regardless of rebalance schedule. **Currently the regime filter is forced OFF in both live and backtest (see flags below), so this branch never fires.**
 
-**Regime filter:** Nifty 500 (`^CRSLDX`) vs its 200-day moving average. RISK-OFF → hold cash. RISK-ON → run the momentum strategy.
+**Regime filter:** Nifty 500 (`^CRSLDX`) vs its 200-day moving average. RISK-OFF → hold cash. RISK-ON → run the momentum strategy. **Currently disabled** (`FORCE_RISK_ON` / `BACKTEST_FORCE_RISK_ON` both `True`).
 
-**Scoring formula** (weights live in `config.py` — these are current defaults):
+**Scoring formula** (weights live in `config.py` — these are the current deployed **opt#7** defaults, multi-period optimizer winner):
 ```
-score = 0.50 * z(mom_12m) + 0.40 * z(mom_6m) + 0.30 * z(mom_3m) + 0.00 * z(vol_6m)
+score = 0.20*z(mom_12m) + 0.30*z(mom_6m) + 0.20*z(mom_3m) − 0.20*z(vol_6m) + 0.50*z(dist_dma)
 ```
-All terms are z-scored cross-sectionally before weighting. `SKIP_RECENT = 25` days skips the most recent month to avoid short-term reversal. `W_VOL` is 0 by default (set negative to penalise high-vol stocks).
+All terms are z-scored cross-sectionally before weighting. `dist_dma` is the z-scored distance above the 250-DMA (trend extension). `SKIP_RECENT = 25` days skips the most recent month to avoid short-term reversal. `W_VOL = -0.20` gives a mild low-vol defensive tilt.
+
+**Position weighting:** `POSITION_WEIGHTING = "tiered"` (`RANK_TIER_WEIGHTS = (1.3, 1.0, 0.8)` — top third overweight, bottom third underweight). A `"score"` (softmax) mode was tested and **rejected** (worse Sharpe, deeper drawdowns from concentration).
 
 **Limit order buffers (tiered):** Buy orders use a 5% buffer for the top 5 ranked stocks, 3% for ranks 6–12, and 2% for the rest. Sell orders use a 1% discount.
 
 ## Key configuration (config.py)
 
-All strategy parameters live here — never hardcode them elsewhere. Important values:
-- `TOP_N = 10` — simultaneous holdings
-- `EXIT_RANK_CUTOFF = 25` — sell if rank drops below this
-- `MAX_PER_SECTOR = 3` — sector concentration cap
-- `DMA_EXIT = 250` — exit stock if price drops below this DMA
+All strategy parameters live here — never hardcode them elsewhere. Current deployed values:
+- `TOP_N = 15` — simultaneous holdings
+- `EXIT_RANK_CUTOFF = 50` — sell if rank drops below this (widened from 25 to cut whipsaw churn)
+- `MAX_PER_SECTOR = 5` — sector concentration cap
+- `DMA_EXIT = 250` / `DMA_EXIT_BUFFER = 0.0` — exit stock if price drops below this DMA (buffer knob exists; currently 0)
+- `LOOKBACK_12M/6M/3M = 280/140/80`, `SKIP_RECENT = 25` — validated optimal for these weights
 - `RISK_FREE_RATE = 0.065` — used for Sharpe/Sortino (India 10yr G-Sec)
-- `START_DATE` / `END_DATE` — backtest window (change here, not in backtester files); default spans 2007→2026 to capture 2008/2020/2022 drawdowns
+- `START_DATE` / `END_DATE` — backtest window only (does NOT affect live); change here, not in backtester files
 - `REGIME_WEIGHTED = False` — if True, uses a weighted composite of Nifty 500/100/Midcap instead of binary regime
 
 **Live vs backtest regime flags (decoupled — do not conflate):**
-- `FORCE_RISK_ON = True` — affects **live/paper** (`execution.py`) only; overrides RISK-OFF so paper testing stays invested. **Set False before going live.**
-- `BACKTEST_FORCE_RISK_ON = False` — affects **`backtester.py`** only; keep False so the regime filter (the main drawdown defense) is actually exercised.
+- `FORCE_RISK_ON = True` — affects **live/paper** (`execution.py`) only; overrides RISK-OFF so the strategy stays invested. **This is the live flag; set False before going live IF you want the regime drawdown-defense.** Currently `True` by deliberate choice (always-invested profile).
+- `BACKTEST_FORCE_RISK_ON = True` — affects **`backtester.py`** only; currently `True` (regime OFF) so backtests match the live always-invested behaviour. Set False to exercise the regime filter (the main drawdown defense) in a backtest.
 
 **Backtest realism knobs (config.py):**
 - `USE_NSE_BHAVCOPY = True` — use the bias-free `nse_data/` cache instead of yfinance
@@ -118,12 +128,15 @@ Two flags must both be flipped before going live:
 1. `PAPER_MODE = True` in `execution.py` — flip to `False`
 2. `FORCE_RISK_ON = True` in `config.py` — flip to `False` (this is the **live** flag; the separate `BACKTEST_FORCE_RISK_ON` does not affect live)
 
-In paper mode, orders are logged to `orders.log` but nothing touches Zerodha. Live mode requires `kiteconnect` installed (`pip install kiteconnect`). Headless Kite login via `kite_login.py` requires `playwright` and `pyotp`.
+In paper mode, `execution.py` routes through `paper_engine.py`: it runs a real cash ledger, confirms the prior day's pending (open) orders at today's open, then sequences sell→confirm→buy and emits a Telegram summary (current holdings + P&L, tomorrow's buy/sell orders, total value = cash + holdings, net P&L). State persists in `paper_state.json`; nothing touches Zerodha. Live mode requires `kiteconnect` installed (`pip install kiteconnect`). Headless Kite login via `kite_login.py` requires `playwright` and `pyotp`.
+
+**Deployment:** `main` is the live branch and runs on the GCP VM via cron (PAPER_MODE so no real money). The VM self-updates with `git pull` each run — runtime-written state files (`current_holdings.json`, `orders.log`, `scheduler.log`, `paper_state.json`, `backups/`) are git-ignored so the pull is never blocked. Commit/push only when asked.
 
 ## State files
 
-- `current_holdings.json` — persists live share counts + avg price + entry date across runs; edit manually if needed to sync with actual Zerodha positions
-- `orders.log` — append-only order log
+- `current_holdings.json` — persists live share counts + avg price + entry date across runs; edit manually if needed to sync with actual Zerodha positions (git-ignored)
+- `paper_state.json` — paper-mode cash ledger + pending (open) orders carried to next day (git-ignored)
+- `orders.log` — append-only order log (git-ignored)
 - `scheduler.log` — append-only cron run log
 - `price_data_cache.csv`, `volume_data_cache.csv`, `open_data_cache.csv`, `regime_data_cache.csv` — yfinance data cache (safe to delete to force full re-download); also used live
 - `nse_data/price_cache.csv`, `open_cache.csv`, `volume_cache.csv`, `regime_cache.csv`, `splits.csv`, `adjustments_report.csv` — bias-free backtest cache (regenerate via `nse_data/build_caches.py`)
