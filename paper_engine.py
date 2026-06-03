@@ -44,6 +44,80 @@ def shares_of(holdings, t):
     return v.get("shares", 0) if isinstance(v, dict) else int(v or 0)
 
 
+# ── PER-LOT TRACKING (shared by live + paper) ────────────────────────────────
+# Each position keeps a `lots` list — the real demat acquisition record:
+#   {ticker: {shares, avg_price, entry_date, lots:[{shares, price, date}, ...]}}
+# `lots` is the source of truth; shares/avg_price/entry_date are DERIVED (kept for
+# backward-compatible display). Sells consume lots FIFO so per-lot cost basis and
+# holding period (for STCG/LTCG) are preserved exactly as the backtester does.
+
+def _recompute(entry):
+    """Refresh derived shares/avg_price/entry_date from the lot list."""
+    lots = entry.get("lots", [])
+    sh   = sum(l["shares"] for l in lots)
+    entry["shares"] = sh
+    if sh > 0:
+        entry["avg_price"]  = round(sum(l["shares"] * l["price"] for l in lots) / sh, 2)
+        entry["entry_date"] = min(l["date"] for l in lots)   # oldest remaining lot
+    else:
+        entry["avg_price"] = 0.0
+    return entry
+
+
+def migrate_lots(holdings):
+    """Ensure every position has a `lots` list. Legacy {shares,avg_price,entry_date}
+    (or a bare int) → one synthesized lot. Mutates and returns holdings."""
+    for t, v in list(holdings.items()):
+        if not isinstance(v, dict):
+            v = {"shares": int(v or 0), "avg_price": 0.0, "entry_date": "unknown"}
+            holdings[t] = v
+        if "lots" not in v:
+            sh = v.get("shares", 0)
+            v["lots"] = ([{"shares": sh, "price": v.get("avg_price", 0.0),
+                           "date": v.get("entry_date") or "unknown"}] if sh > 0 else [])
+            _recompute(v)
+    return holdings
+
+
+def add_lot(holdings, ticker, shares, price, date):
+    """Record a BUY as a new acquisition lot; refresh derived fields."""
+    if shares <= 0:
+        return
+    entry = holdings.setdefault(ticker, {"lots": []})
+    entry.setdefault("lots", []).append(
+        {"shares": int(shares), "price": round(float(price), 2), "date": str(date)})
+    _recompute(entry)
+
+
+def realize_fifo(holdings, ticker, shares_to_sell, fill_px, sell_date):
+    """Consume lots FIFO for a (partial or full) sell. Returns
+    (gross_pnl, consumed) where consumed = [(shares, cost_price, buy_date), ...] for
+    per-lot tax. Refreshes derived fields; pops the position when fully sold. Cost
+    (brokerage/STT) is NOT subtracted here — the caller applies it."""
+    entry = holdings.get(ticker)
+    if not isinstance(entry, dict):
+        return 0.0, []
+    # Self-heal: a position with shares but no lots (un-migrated) → synthesize one.
+    if not entry.get("lots") and entry.get("shares", 0) > 0:
+        entry["lots"] = [{"shares": entry["shares"], "price": entry.get("avg_price", 0.0),
+                          "date": entry.get("entry_date") or "unknown"}]
+    lots, remaining, gross, consumed = entry.get("lots", []), int(shares_to_sell), 0.0, []
+    while remaining > 0 and lots:
+        lot  = lots[0]
+        take = min(remaining, lot["shares"])
+        gross += (fill_px - lot["price"]) * take
+        consumed.append((take, lot["price"], lot["date"]))
+        lot["shares"] -= take
+        remaining     -= take
+        if lot["shares"] <= 0:
+            lots.pop(0)
+    if lots:
+        _recompute(entry)
+    else:
+        holdings.pop(ticker, None)
+    return gross, consumed
+
+
 def generate_orders(close_px, top_n, ranks, holdings, cash, *,
                     sell_list, strength=1.0, concentration_cap=1.5):
     """Build the LIMIT orders to place at today's close.
@@ -140,12 +214,7 @@ def fill_orders(pending, opens, holdings, cash, realized, today):
                 val = sh * op
                 tc = txn_cost(val, "buy")
                 if cash >= val + tc:
-                    ex = shares_of(holdings, t)
-                    avg = holdings.get(t, {}).get("avg_price", 0.0) if isinstance(holdings.get(t), dict) else 0.0
-                    ns = ex + sh
-                    navg = (avg * ex + op * sh) / ns if ex > 0 and avg > 0 else op
-                    holdings[t] = {"shares": ns, "avg_price": round(navg, 2),
-                                   "entry_date": (holdings.get(t, {}) or {}).get("entry_date") or today}
+                    add_lot(holdings, t, sh, op, today)     # records a new acquisition lot
                     cash -= (val + tc)
                     confirms.append(f"✅ BUY  {t} ×{sh} filled @ ₹{op:.1f}")
                 else:
@@ -158,13 +227,9 @@ def fill_orders(pending, opens, holdings, cash, realized, today):
             if op >= lim and n > 0:
                 val = n * op
                 tc = txn_cost(val, "sell")
-                avg = holdings.get(t, {}).get("avg_price", 0.0) if isinstance(holdings.get(t), dict) else 0.0
-                realized += (op - avg) * n - tc
+                gross, _ = realize_fifo(holdings, t, n, op, today)   # FIFO lot cost basis
+                realized += gross - tc
                 cash += val - tc
-                if cur - n > 0:
-                    holdings[t]["shares"] = cur - n
-                else:
-                    holdings.pop(t, None)
                 confirms.append(f"✅ SELL {t} ×{n} filled @ ₹{op:.1f}")
             elif n > 0:
                 confirms.append(f"⚠️ SELL {t} ×{n} MISSED — open ₹{op:.1f} < limit ₹{lim:.1f} (gap-down)")

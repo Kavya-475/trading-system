@@ -250,7 +250,7 @@ def load_holdings() -> dict:
                 migrated[ticker] = {"shares": int(val), "avg_price": 0.0, "entry_date": "unknown", "migrated": True}
             else:
                 migrated[ticker] = val
-        return migrated
+        return pe.migrate_lots(migrated)   # ensure every position has a per-lot record
     return {}
 
 
@@ -524,12 +524,7 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
                 # Log with market price (not limit) — that's the realistic fill price
                 buy_lines.append(f"BUY {ticker} ×{shares_to_buy} @ ₹{price}")
                 if res["status"] in ("paper", "placed"):
-                    # Update holdings with new weighted average price
-                    existing_shares = get_shares(holdings, ticker)
-                    new_shares = existing_shares + shares_to_buy
-                    old_avg = get_avg_price(holdings, ticker)
-                    new_avg = (old_avg * existing_shares + price * shares_to_buy) / new_shares if existing_shares > 0 and old_avg > 0 else price
-                    set_holding(holdings, ticker, new_shares, new_avg)
+                    pe.add_lot(holdings, ticker, shares_to_buy, price, str(date.today()))
                     bought_count += 1
             else:
                 log.info(f"Skipping {ticker} @ ₹{price:,.0f} — insufficient allocation for 1 share")
@@ -558,11 +553,7 @@ def execute_buys(kite, tickers_to_buy: list, holdings: dict,
                         res = place_buy_order(kite, ticker, shares_to_buy, limit_price)
                         buy_lines.append(f"BUY {ticker} ×{shares_to_buy} @ ₹{price} [top-up]")
                         if res["status"] in ("paper", "placed"):
-                            existing_shares = get_shares(holdings, ticker)
-                            new_shares = existing_shares + shares_to_buy
-                            old_avg = get_avg_price(holdings, ticker)
-                            new_avg = (old_avg * existing_shares + price * shares_to_buy) / new_shares if existing_shares > 0 and old_avg > 0 else price
-                            set_holding(holdings, ticker, new_shares, new_avg)
+                            pe.add_lot(holdings, ticker, shares_to_buy, price, str(date.today()))
 
     return buy_lines
 
@@ -780,7 +771,7 @@ def _run_execution_impl():
                 res        = place_sell_order(kite, ticker, shares, sell_price)
                 sell_lines.append(f"SELL {ticker} ×{shares} @ ₹{sell_price}")
                 if res["status"] in ("paper", "placed"):
-                    set_holding(holdings, ticker, 0)
+                    pe.realize_fifo(holdings, ticker, shares, sell_price, str(date.today()))
         save_holdings(holdings)
         send_telegram(
             f"🔴 *RISK-OFF — Market Alert*\n"
@@ -812,7 +803,7 @@ def _run_execution_impl():
                 res        = place_sell_order(kite, ticker, shares, sell_price)
                 sell_lines.append(f"SELL {ticker} ×{shares} @ ₹{sell_price}")
                 if res["status"] in ("paper", "placed"):
-                    set_holding(holdings, ticker, 0)
+                    pe.realize_fifo(holdings, ticker, shares, sell_price, str(date.today()))
 
         # ── Immediately find and buy replacements ───────────────────────────
         # This is the key change — don't wait for month-end rebalance
@@ -852,7 +843,7 @@ def _run_execution_impl():
                 res        = place_sell_order(kite, ticker, shares, sell_price)
                 sell_lines.append(f"SELL {ticker} ×{shares} @ ₹{sell_price} [rotation]")
                 if res["status"] in ("paper", "placed"):
-                    set_holding(holdings, ticker, 0)
+                    pe.realize_fifo(holdings, ticker, shares, sell_price, str(date.today()))
 
         # Buy full top N (including rotations)
         port_value    = get_portfolio_value(kite)
