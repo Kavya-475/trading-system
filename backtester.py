@@ -464,11 +464,13 @@ def load_nse_bhavcopy_cache():
     """Load the survivorship-bias-free cache built from NSE bhavcopy archives
     (nse_data/build_caches.py). Same return shape as load_data()."""
     print("Loading BIAS-FREE NSE bhavcopy cache…")
-    close  = pd.read_csv(cfg.NSE_PRICE_CACHE,  index_col=0, parse_dates=True)
-    open_p = pd.read_csv(cfg.NSE_OPEN_CACHE,   index_col=0, parse_dates=True) \
-             if os.path.exists(cfg.NSE_OPEN_CACHE) else close.copy()
-    volume = pd.read_csv(cfg.NSE_VOLUME_CACHE, index_col=0, parse_dates=True) \
-             if os.path.exists(cfg.NSE_VOLUME_CACHE) else close.copy()
+    # sort_index() everywhere: a rebuilt cache can come back with an out-of-order
+    # (non-monotonic) date index, which breaks label-based date slicing (.loc[s:e]).
+    close  = pd.read_csv(cfg.NSE_PRICE_CACHE,  index_col=0, parse_dates=True).sort_index()
+    open_p = (pd.read_csv(cfg.NSE_OPEN_CACHE,  index_col=0, parse_dates=True).sort_index()
+              if os.path.exists(cfg.NSE_OPEN_CACHE) else close.copy())
+    volume = (pd.read_csv(cfg.NSE_VOLUME_CACHE, index_col=0, parse_dates=True).sort_index()
+              if os.path.exists(cfg.NSE_VOLUME_CACHE) else close.copy())
     # Index/regime series carry NO survivorship bias, so prefer the longer
     # yfinance regime cache (2006→) over the NSE index cache (only 2015→, since
     # NSE's ind_close_all archive doesn't exist pre-2015). This keeps the regime
@@ -476,6 +478,7 @@ def load_nse_bhavcopy_cache():
     regime_path = cfg.REGIME_CACHE if os.path.exists(cfg.REGIME_CACHE) else cfg.NSE_REGIME_CACHE
     print(f"  regime/benchmark series from {regime_path}")
     regime = pd.read_csv(regime_path, index_col=0, parse_dates=True)
+    regime = regime[~regime.index.duplicated(keep="last")].sort_index()
     n500 = regime["nifty500"]
     n50  = regime["nifty50"]      if "nifty50"      in regime else n500
     n100 = regime["nifty100"]     if "nifty100"     in regime else n500
