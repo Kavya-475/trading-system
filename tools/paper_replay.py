@@ -100,7 +100,16 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="don't overwrite current_holdings.json")
     ap.add_argument("--messages", action="store_true",
                     help="print the full daily Telegram-style message for every date")
+    ap.add_argument("--telegram", action="store_true",
+                    help="ALSO send each day's message to Telegram (1s apart). Implies --messages.")
     args = ap.parse_args()
+
+    send_telegram = None
+    if args.telegram:
+        import time as _time
+        from execution import send_telegram          # reuse the live send path exactly
+        if not (os.getenv("TELEGRAM_BOT_TOKEN") and os.getenv("TELEGRAM_CHAT_ID")):
+            print("⚠ --telegram set but TELEGRAM_BOT_TOKEN/CHAT_ID not configured — nothing will send.")
 
     close, volume = load_for_signals()
     nifty500, _, _, _ = load_index_data()
@@ -175,9 +184,13 @@ def main():
             final_pending = orders
 
         held = sorted(holdings, key=lambda t: -holdings[t]["shares"] * _last(close_t, t))
-        if args.messages:
+        if args.messages or args.telegram:
+            msg = _day_message(day, regime, fills, orders, holdings, close_t, cash, realized, args.capital)
             print("\n" + "=" * 60)
-            print(_day_message(day, regime, fills, orders, holdings, close_t, cash, realized, args.capital))
+            print(msg)
+            if args.telegram and send_telegram is not None:
+                send_telegram(msg)
+                _time.sleep(1.0)        # stay under Telegram's per-chat rate limit
         else:
             print(f"{day.date()}  pv ₹{pv:,.0f}  cash ₹{cash:,.0f}  [{len(held)} held]  {decision}")
             for f in fills:
