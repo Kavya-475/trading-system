@@ -57,12 +57,49 @@ def _quiet(fn, *a, **k):
         return fn(*a, **k)
 
 
+def _day_message(day, regime, fills, orders, holdings, close_t, cash, realized, capital):
+    """Render the exact daily message execution.py would Telegram on this date —
+    confirmations / tomorrow's orders / holdings+P&L / cash / total value / net P&L.
+    Built from the SAME values the live _paper_telegram uses, dated to the replay day."""
+    held   = [t for t in holdings if holdings[t]["shares"] > 0]
+    posval = sum(holdings[t]["shares"] * _last(close_t, t) for t in held)
+    equity = cash + posval
+    net    = equity - capital
+    unreal = sum((_last(close_t, t) - holdings[t]["avg_price"]) * holdings[t]["shares"]
+                 for t in held if holdings[t]["avg_price"] > 0)
+    sells = [o for o in orders if o["side"] == "sell"]
+    buys  = [o for o in orders if o["side"] == "buy"]
+
+    L = [f"📋 PAPER — Daily Run · {day.date()}", f"Regime: {regime}"]
+    if fills:
+        L += ["", "Confirmed today (filled at open):", *[f"  {f}" for f in fills]]
+    L += ["", "Tomorrow's SELL orders:" + ("" if sells else " none")]
+    L += [f"  SELL {o['ticker']} ×{o['shares']} @ ≥₹{o['limit']:,.0f}" for o in sells]
+    L += ["Tomorrow's BUY orders:" + ("" if buys else " none")]
+    L += [f"  BUY  {o['ticker']} ×{o['shares']} @ ≤₹{o['limit']:,.0f}" for o in buys]
+    if held:
+        L += ["", f"Holdings ({len(held)}):"]
+        for t in sorted(held, key=lambda t: -holdings[t]["shares"] * _last(close_t, t)):
+            sh, avg, cur = holdings[t]["shares"], holdings[t]["avg_price"], _last(close_t, t)
+            pnl = (cur - avg) * sh; pct = (pnl / (avg * sh) * 100) if avg > 0 else 0.0
+            L.append(f"  {t:<11} ×{sh:<4} @₹{cur:,.0f}  {pnl:+,.0f} ({pct:+.1f}%)")
+    L += ["", "─" * 24,
+          f"Cash:        ₹{cash:,.0f}",
+          f"Holdings:    ₹{posval:,.0f}",
+          f"Total Value: ₹{equity:,.0f}",
+          f"Net P&L: ₹{net:+,.0f} ({net / capital * 100:+.2f}%)",
+          f"  (realized ₹{realized:+,.0f} · unrealized ₹{unreal:+,.0f})"]
+    return "\n".join(L)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--start", required=True, help="first replay day, e.g. 2026-05-15")
     ap.add_argument("--end", default=None, help="last replay day (default: last cached day)")
     ap.add_argument("--capital", type=float, default=float(os.getenv("TRADING_CAPITAL", "100000")))
     ap.add_argument("--dry-run", action="store_true", help="don't overwrite current_holdings.json")
+    ap.add_argument("--messages", action="store_true",
+                    help="print the full daily Telegram-style message for every date")
     args = ap.parse_args()
 
     close, volume = load_for_signals()
@@ -138,9 +175,13 @@ def main():
             final_pending = orders
 
         held = sorted(holdings, key=lambda t: -holdings[t]["shares"] * _last(close_t, t))
-        print(f"{day.date()}  pv ₹{pv:,.0f}  cash ₹{cash:,.0f}  [{len(held)} held]  {decision}")
-        for f in fills:
-            print(f"      ↳ {f}")
+        if args.messages:
+            print("\n" + "=" * 60)
+            print(_day_message(day, regime, fills, orders, holdings, close_t, cash, realized, args.capital))
+        else:
+            print(f"{day.date()}  pv ₹{pv:,.0f}  cash ₹{cash:,.0f}  [{len(held)} held]  {decision}")
+            for f in fills:
+                print(f"      ↳ {f}")
 
     # ── final P&L (marked to last close) ────────────────────────────────────
     last_day = days[-1]
