@@ -45,3 +45,6 @@ wfo_lb_top.csv
 
 surface_results.csv
 surface.log
+
+# runtime single-run lock
+execution.lock

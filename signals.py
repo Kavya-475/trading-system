@@ -320,9 +320,24 @@ UNIVERSE = {
 # ─────────────────────────────────────────────
 def get_regime(nifty500: pd.Series) -> str:
     clean  = nifty500.dropna()                            # remove any NaN dates
+
+    # ── FAIL-SAFE: a DATA problem must never look like a sell signal ──────────
+    # If we can't compute the DMA (too little history) or the latest value/DMA is
+    # NaN, return "UNKNOWN" so the caller ABORTS the run and keeps holdings —
+    # rather than silently reading missing data as "below DMA → RISK-OFF" and
+    # liquidating the whole book on a download glitch.
+    if len(clean) < cfg.REGIME_DMA:
+        print(f"\nREGIME CHECK\n  ⚠ Insufficient Nifty 500 history "
+              f"({len(clean)} < {cfg.REGIME_DMA} days) — regime UNKNOWN")
+        return "UNKNOWN"
+
     dma    = clean.rolling(cfg.REGIME_DMA).mean()         # rolling 200-day average
     latest = clean.iloc[-1]                               # today's Nifty 500 value
     l_dma  = dma.iloc[-1]                                 # today's 200-DMA value
+
+    if pd.isna(latest) or pd.isna(l_dma):
+        print("\nREGIME CHECK\n  ⚠ NaN in Nifty 500 / 200-DMA — regime UNKNOWN")
+        return "UNKNOWN"
 
     # If REGIME_CONFIRM_DAYS > 0, require that many consecutive days above DMA
     # before declaring RISK-ON. This prevents false re-entries during choppy markets.
@@ -603,6 +618,15 @@ def run_signals(current_holdings: list = []) -> dict:
     close, volume = load_for_signals()
     nifty500, nifty50, nifty100, nifty_mid = load_index_data()
 
+    # ── FAIL-SAFE data guard (both regime modes) ─────────────────────────────
+    # Not enough regime history ⇒ we cannot judge the market. Abort the run and
+    # hold positions unchanged. This is a DATA problem, NOT a market signal, so it
+    # must bypass the FORCE_RISK_ON override below (which would wrongly force ON).
+    if len(nifty500.dropna()) < cfg.REGIME_DMA:
+        print(f"REGIME data insufficient "
+              f"({len(nifty500.dropna())} < {cfg.REGIME_DMA} days) — aborting run.")
+        return {'regime': 'UNKNOWN', 'portfolio': pd.DataFrame(), 'exits': [], 'strength': 0.0}
+
     strength = 1.0   # default to fully deployed (overridden in REGIME_WEIGHTED mode)
 
     # Determine market regime — binary (RISK-ON/OFF) or weighted (0.0–1.0 strength)
@@ -611,6 +635,12 @@ def run_signals(current_holdings: list = []) -> dict:
         regime   = 'RISK-ON' if strength > 0 else 'RISK-OFF'
     else:
         regime = get_regime(nifty500)     # binary: Nifty 500 vs 200 DMA
+
+    # Data problem (NaN in the index series) → abort, hold positions. Must come
+    # before the FORCE_RISK_ON override so a glitch can't be forced to RISK-ON.
+    if regime == 'UNKNOWN':
+        print('REGIME UNKNOWN → aborting run (data issue); holdings unchanged.')
+        return {'regime': 'UNKNOWN', 'portfolio': pd.DataFrame(), 'exits': [], 'strength': 0.0}
 
     # Handle RISK-OFF — either exit all or override for paper testing
     if regime == 'RISK-OFF':

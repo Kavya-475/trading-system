@@ -22,6 +22,8 @@ Schedule every weekday at 3:45 PM IST.
 import os
 import json
 import logging
+import fcntl
+from contextlib import contextmanager
 from datetime import datetime, date
 from dotenv import load_dotenv
 import pandas as pd
@@ -101,6 +103,44 @@ def load_latest_prices() -> dict:
         except Exception as e:
             log.error(f"Could not read price cache: {e}")
     return prices
+
+
+LOCK_FILE = "execution.lock"
+
+
+@contextmanager
+def _run_lock():
+    """Single-run guard: prevents two execution runs from racing (overlapping cron
+    fires or manual re-runs), which previously locked yfinance's sqlite cache and
+    produced duplicate rebuilds. Non-blocking — a second run aborts cleanly."""
+    f = open(LOCK_FILE, "w")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        log.error("Another execution run is already in progress — aborting this one.")
+        f.close()
+        raise SystemExit(0)
+    try:
+        yield
+    finally:
+        fcntl.flock(f, fcntl.LOCK_UN)
+        f.close()
+
+
+def _cache_age_days():
+    """Calendar days between the price cache's last date and today. None if the
+    cache is missing/unreadable. Used to refuse trading on a stale cache (a silent
+    data-pipeline failure should never lead to trading on old prices)."""
+    if not os.path.exists(cfg.DATA_CACHE_FILE):
+        return None
+    try:
+        idx = pd.read_csv(cfg.DATA_CACHE_FILE, index_col=0, parse_dates=True).index
+        if len(idx) == 0:
+            return None
+        return (date.today() - idx[-1].date()).days
+    except Exception as e:
+        log.error(f"Could not read cache date: {e}")
+        return None
 
 
 # ─────────────────────────────────────────────
@@ -655,6 +695,13 @@ def run_execution_paper(holdings, close_px, signals):
 
 
 def run_execution():
+    """Thin wrapper: hold a single-run lock so overlapping cron fires / manual
+    re-runs can't race (see _run_lock), then run the real pipeline."""
+    with _run_lock():
+        _run_execution_impl()
+
+
+def _run_execution_impl():
     if cfg.TRADING_HALTED:
         log.info("TRADING_HALTED flag set — aborting run")
         return
@@ -677,12 +724,34 @@ def run_execution():
         log.error("No price data. Run data_manager.py first.")
         return
 
+    # ── FRESHNESS GUARD: never trade on a stale cache ───────────────────────
+    # A silent data-pipeline failure (data_manager didn't update) must not lead to
+    # trading on old prices. Abort + alert if the cache hasn't advanced recently.
+    # Threshold spans normal weekend/holiday gaps; only a real failure exceeds it.
+    age = _cache_age_days()
+    max_stale = getattr(cfg, "MAX_CACHE_STALE_DAYS", 6)
+    if age is None or age > max_stale:
+        log.error(f"Price cache stale/unreadable (age={age}d > {max_stale}d) — aborting, no trades.")
+        send_telegram(f"⚠️ Run aborted — price cache stale (age {age}d). "
+                      f"No trades placed; holdings unchanged. Check data_manager.")
+        return
+
     # ── Connect to broker (returns None in PAPER_MODE) ─────────────────────
     kite = get_kite_client()
 
     # ── Run signal engine — regime + scores + exit signals ─────────────────
     log.info("Running signal engine...")
     signals        = run_signals(current_tickers)
+
+    # ── DATA-INTEGRITY GUARD: UNKNOWN/HALTED regime ⇒ do nothing ────────────
+    # run_signals returns UNKNOWN when the regime data is missing/short/NaN. That
+    # is a DATA fault, not a market call — so we keep holdings and place NO orders
+    # (never liquidate). This is checked BEFORE any FORCE_RISK_ON override.
+    if signals.get("regime") in ("UNKNOWN", "HALTED"):
+        log.error(f"Regime {signals.get('regime')} — aborting run; holdings unchanged.")
+        send_telegram(f"⚠️ Run aborted — regime {signals.get('regime')} (data issue). "
+                      f"No trades placed; holdings unchanged.")
+        return
 
     # ── PAPER MODE → ledger engine (open-fill confirmation, cash tracking) ──
     if PAPER_MODE:
