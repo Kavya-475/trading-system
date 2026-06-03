@@ -840,8 +840,37 @@ def build_universe_benchmark(close, all_days, valid_tickers, history, dynamic):
     return pd.Series(out, index=all_days)
 
 
+# ── Monte-Carlo trade removal ────────────────────────────────────────────────
+# When MC_ENTRY_SKIP_PROB > 0, each attempt to ESTABLISH A NEW POSITION is skipped
+# with that probability (capital stays in cash — NOT swept into other holdings).
+# This re-simulates the true divergent path of "what if I'd randomly missed p% of
+# my entries", the exact ground-truth version of the trade-removal robustness test.
+# Set MC_ENTRY_SKIP_PROB + MC_ENTRY_SKIP_SEED, then call run_backtest(save=False).
+MC_ENTRY_SKIP_PROB = 0.0
+MC_ENTRY_SKIP_SEED = None
+_mc_rng   = None
+_mc_stats = {"attempted": 0, "skipped": 0}
+
+
+def _mc_skip_new_entry():
+    """For Monte-Carlo trade removal: True ⇒ skip establishing this new position.
+    Only meaningful when the caller is about to open a brand-new holding (shares==0)."""
+    global _mc_stats
+    if MC_ENTRY_SKIP_PROB <= 0 or _mc_rng is None:
+        return False
+    _mc_stats["attempted"] += 1
+    if _mc_rng.random() < MC_ENTRY_SKIP_PROB:
+        _mc_stats["skipped"] += 1
+        return True
+    return False
+
+
 # ── Main backtest ──────────────────────────────────────────────────────────
 def run_backtest(save=True):
+    global _mc_rng, _mc_stats
+    _mc_rng   = np.random.default_rng(MC_ENTRY_SKIP_SEED) if MC_ENTRY_SKIP_PROB > 0 else None
+    _mc_stats = {"attempted": 0, "skipped": 0}
+
     close, volume, nifty500, nifty50, nifty100, nifty_mid, open_prices = load_data()
 
     # Load point-in-time universe history (fixes survivorship bias).
@@ -1209,6 +1238,8 @@ def run_backtest(save=True):
                 px = get_price(close, t, day)
                 if px <= 0:
                     continue
+                if holdings.get(t, 0) == 0 and _mc_skip_new_entry():
+                    continue                          # MC: drop this entry (cash stays idle)
                 rank     = cached_scored.index.get_loc(t) if t in cached_scored.index else 99
                 open_px  = get_open_price(open_prices, t, next_day)
                 fill_px  = get_fill_price(px, open_px, "buy", rank)
@@ -1271,11 +1302,15 @@ def run_backtest(save=True):
             # share is within 2× the slot and affordable, take a single share;
             # leftover is redistributed (weighted) in the second pass.
             bought = 0
+            mc_reserved = 0.0          # MC: capital of skipped new entries — kept idle, not swept
             for i, t in enumerate(selected):
                 px = get_price(close, t, day)
                 if px <= 0:
                     continue
                 tgt_i   = deploy_capital * weights[i]
+                if holdings.get(t, 0) == 0 and _mc_skip_new_entry():
+                    mc_reserved += tgt_i              # MC: drop this entry (reserve its slot as cash)
+                    continue
                 rank    = cached_scored.index.get_loc(t) if t in cached_scored.index else 99
                 open_px = get_open_price(open_prices, t, next_day)
                 fill_px = get_fill_price(px, open_px, "buy", rank)
@@ -1306,7 +1341,7 @@ def run_backtest(save=True):
                 in_scope  = [t for t in cached_portfolio if holdings.get(t, 0) > 0]
                 scope_val = sum(holdings.get(t, 0) * float(full_close[di, t_to_i[t]])
                                 for t in in_scope if t_to_i.get(t) is not None)
-                remaining = (port_val * strength) - scope_val
+                remaining = (port_val * strength) - scope_val - mc_reserved
                 if remaining > 500 and in_scope:
                     w2     = rank_weights(len(in_scope))     # redistribute by the same weights
                     total2 = scope_val + remaining

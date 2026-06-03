@@ -1,258 +1,203 @@
 """
-tools/monte_carlo_trades.py — Monte Carlo trade removal analysis
-================================================================
-Randomly removes X% of completed round-trip trades and recalculates
-CAGR / Sharpe / max-drawdown across N simulations.
+tools/monte_carlo_trades.py — Monte Carlo trade removal (EXACT re-simulation)
+=============================================================================
+Robustness test: "if I'd randomly MISSED p% of my entries, what happens?"
 
-Answers: how sensitive is the strategy to any random subset of trades?
-If we had missed X% of entries, what is the distribution of outcomes?
+Method (ground truth — no rupee arithmetic, no compounding approximation):
+  For each simulation, the backtester is re-run with backtester.MC_ENTRY_SKIP_PROB
+  set: every attempt to OPEN A NEW POSITION is skipped with probability p, and that
+  slot's capital stays in CASH (earns CASH_YIELD, is NOT swept into other holdings).
+  Each sim uses a fresh RNG seed, so the portfolio path genuinely diverges — exit
+  timing, replacements, taxes and sizing are all re-derived correctly.
 
-Method
-------
-1. Match BUY → SELL rows to get completed round-trips with net P&L.
-2. For each simulation: randomly select removal_rate% of trades to drop.
-3. Dropped trades: their capital earns cash_yield instead (daily_rf per day held).
-4. Adjusted daily P&L = base daily P&L − removed_trade_daily_pnl + cash_gain.
-   (trade P&L is spread linearly across its holding days — good approximation
-   for Sharpe/maxDD; CAGR is exact to within cash-yield rounding.)
-5. Report percentile distribution across simulations.
+Why re-simulation (not subtracting trade P&L from the equity curve): a momentum
+strategy RECYCLES capital across hundreds of sequential trades, so the sum of
+realised trade P&L is many times the net portfolio growth. Subtracting absolute
+trade P&L from a compounding curve is mathematically invalid (it drives equity
+negative and pins CAGR to the wipe-out floor). Re-running is the only honest way.
 
 Usage
 -----
-    python tools/monte_carlo_trades.py                          # defaults
-    python tools/monte_carlo_trades.py --remove 0.1 0.2 0.3 0.4 0.5
-    python tools/monte_carlo_trades.py --n 2000 --remove 0.2
+    python tools/monte_carlo_trades.py                       # 0.1 0.2 0.3, 500 sims
+    python tools/monte_carlo_trades.py --remove 0.1 0.2 0.3 0.4 0.5 --n 1000
+    python tools/monte_carlo_trades.py --workers 8
+
+⚠  Uses the CURRENT config.py window/params. Set START_DATE/END_DATE first
+   (e.g. the clean bias-free 2007-01-01 → 2020-07-31 block) for an honest read.
 """
 import argparse
+import contextlib
 import os
 import sys
+import time
+import multiprocessing as mp
 
-import numpy as np
 import pandas as pd
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 
 TRADE_LOG  = os.path.join(HERE, "trade_log_daily.csv")
-EQUITY_CSV = os.path.join(HERE, "equity_curve_daily.csv")
-RISK_FREE  = 0.065   # India 10yr G-Sec, matches config.py
+OUT        = os.path.join(HERE, "mc_trades_results.csv")
+PCTS       = [5, 10, 25, 50, 75, 90, 95]
 
 
-# ── data loading ──────────────────────────────────────────────────────────────
+# ── worker: each sim re-runs the backtest with a per-entry skip probability ────
 
-def load_round_trips(path: str) -> pd.DataFrame:
-    """Match BUY rows to SELL rows (FIFO per ticker) → completed round trips."""
-    df   = pd.read_csv(path)
-    buys = {}
-    rows = []
+def _init():
+    """Cache the (deterministic) data load so 2000 sims don't re-read CSVs."""
+    import backtester as bt
+    orig, cache = bt.load_data, {}
+    def cached():
+        if "d" not in cache:
+            cache["d"] = orig()
+        return cache["d"]
+    bt.load_data = cached
+
+
+def evaluate(args):
+    rate, seed = args
+    import backtester as bt
+    bt.MC_ENTRY_SKIP_PROB = rate
+    bt.MC_ENTRY_SKIP_SEED = seed
+    try:
+        with open(os.devnull, "w") as dn, contextlib.redirect_stdout(dn), contextlib.redirect_stderr(dn):
+            m = bt.run_backtest(save=False)
+        att = bt._mc_stats["attempted"]
+        return {"rate": rate, "seed": seed,
+                "cagr": float(m["cagr"]), "sharpe": float(m["sharpe"]),
+                "maxdd": float(m["maxdd"]), "edge_cagr": float(m["edge_cagr"]),
+                "skipped": bt._mc_stats["skipped"], "attempted": att,
+                "skip_frac": (bt._mc_stats["skipped"] / att) if att else 0.0}
+    except Exception as ex:                                  # noqa: BLE001
+        return {"rate": rate, "seed": seed, "cagr": None, "err": str(ex)[:140]}
+
+
+# ── descriptive stats from the baseline trade log (still valid) ────────────────
+
+def load_round_trips(path):
+    df, buys, rows = pd.read_csv(path), {}, []
     for _, r in df.iterrows():
-        act    = str(r["action"]).strip()
-        ticker = str(r["ticker"]).strip()
-        date   = pd.Timestamp(r["date"])
-        val    = float(r["value"])
-        cost   = float(r["cost"]) if pd.notna(r.get("cost")) else 0.0
-        tax    = float(r["tax"])  if pd.notna(r.get("tax"))  else 0.0
-
-        if act == "BUY":
-            buys.setdefault(ticker, []).append(
-                {"entry_date": date, "entry_value": val, "entry_cost": cost}
-            )
+        act, tk = str(r["action"]).strip(), str(r["ticker"]).strip()
+        if act.startswith("BUY"):
+            buys.setdefault(tk, []).append(
+                {"d": pd.Timestamp(r["date"]), "v": float(r["value"]),
+                 "c": float(r["cost"]) if pd.notna(r.get("cost")) else 0.0})
         elif act.startswith("SELL"):
-            queue = buys.get(ticker, [])
-            if not queue:
+            q = buys.get(tk, [])
+            if not q:
                 continue
-            buy      = queue.pop(0)
-            net_pnl  = val - buy["entry_value"] - tax - buy["entry_cost"]
-            holding  = max(1, (date - buy["entry_date"]).days)
-            rows.append({
-                "ticker":       ticker,
-                "entry_date":   buy["entry_date"],
-                "exit_date":    date,
-                "entry_value":  buy["entry_value"],
-                "exit_value":   val,
-                "net_pnl":      net_pnl,
-                "holding_days": holding,
-                "return_pct":   net_pnl / buy["entry_value"] if buy["entry_value"] > 0 else 0.0,
-                "sell_reason":  act,
-            })
+            b   = q.pop(0)
+            tax = float(r["tax"]) if pd.notna(r.get("tax")) else 0.0
+            pnl = float(r["value"]) - b["v"] - tax - b["c"]
+            rows.append({"ticker": tk, "entry_date": b["d"],
+                         "net_pnl": pnl, "ret": pnl / b["v"] if b["v"] > 0 else 0.0,
+                         "days": max(1, (pd.Timestamp(r["date"]) - b["d"]).days),
+                         "reason": act})
     return pd.DataFrame(rows)
 
 
-def load_equity(path: str):
-    eq = pd.read_csv(path, parse_dates=["date"]).set_index("date").sort_index()
-    pnl = eq["value"].diff().fillna(0)
-    return eq["value"], pnl
-
-
-# ── simulation core ───────────────────────────────────────────────────────────
-
-def _adjust(base_pnl: pd.Series, removed: pd.DataFrame, cash_yield: float) -> pd.Series:
-    """
-    Subtract removed trades' P&L and add cash yield for the same period.
-    Trade P&L is spread evenly across holding days (linear approximation).
-    """
-    adj       = base_pnl.copy().astype(float)
-    daily_rf  = cash_yield / 252
-    for _, t in removed.iterrows():
-        mask   = (adj.index >= t["entry_date"]) & (adj.index <= t["exit_date"])
-        n_days = int(mask.sum())
-        if n_days == 0:
-            continue
-        daily_trade  = t["net_pnl"] / n_days
-        daily_cash   = t["entry_value"] * daily_rf
-        adj[mask]   += -daily_trade + daily_cash
-    return adj
-
-
-def _metrics(adj_pnl: pd.Series, v0: float) -> dict:
-    equity  = (v0 + adj_pnl.cumsum()).clip(lower=1)
-    years   = (equity.index[-1] - equity.index[0]).days / 365.25
-    cagr    = (equity.iloc[-1] / v0) ** (1 / max(years, 1e-6)) - 1
-    rets    = equity.pct_change().dropna()
-    ann_vol = rets.std() * np.sqrt(252)
-    sharpe  = (cagr - RISK_FREE) / ann_vol if ann_vol > 1e-9 else 0.0
-    peak    = equity.cummax()
-    maxdd   = ((equity - peak) / peak).min()
-    return {"cagr": cagr, "sharpe": sharpe, "maxdd": maxdd}
-
-
-def simulate(trips: pd.DataFrame, base_pnl: pd.Series, portfolio: pd.Series,
-             removal_rate: float, n_sims: int, cash_yield: float,
-             seed: int = 42) -> pd.DataFrame:
-    rng  = np.random.default_rng(seed)
-    v0   = float(portfolio.iloc[0])
-    n    = len(trips)
-    k    = max(1, int(round(n * removal_rate)))
-    rows = []
-    for _ in range(n_sims):
-        idx     = rng.choice(n, size=k, replace=False)
-        removed = trips.iloc[idx]
-        adj     = _adjust(base_pnl, removed, cash_yield)
-        rows.append(_metrics(adj, v0))
-    return pd.DataFrame(rows)
-
-
-# ── reporting ─────────────────────────────────────────────────────────────────
-
-PCTS = [5, 10, 25, 50, 75, 90, 95]
-
-def _pct_row(values: pd.Series, fmt: str) -> str:
-    return "  ".join(fmt % (v * 100 if "%" in fmt else v)
-                     for v in [values.quantile(p / 100) for p in PCTS])
-
-
-def report(trips: pd.DataFrame, base_pnl: pd.Series, portfolio: pd.Series,
-           removal_rate: float, n_sims: int, cash_yield: float, seed: int):
-    df   = simulate(trips, base_pnl, portfolio, removal_rate, n_sims, cash_yield, seed)
-    v0, vf = float(portfolio.iloc[0]), float(portfolio.iloc[-1])
-    years  = (portfolio.index[-1] - portfolio.index[0]).days / 365.25
-    base_cagr = (vf / v0) ** (1 / years) - 1
-
-    k = max(1, int(round(len(trips) * removal_rate)))
-    print("\n  ── Remove %.0f%% (%d of %d trades) · %d sims ──" %
-          (removal_rate * 100, k, len(trips), n_sims))
-    print("  Base CAGR (0%% removed): %.1f%%" % (base_cagr * 100))
-    hdr = "  %-8s " % "metric" + "  ".join("%6s" % ("p%d" % p) for p in PCTS)
-    print(hdr)
-    print("  " + "-" * (len(hdr) - 2))
-
-    for col, label, fmt in [
-        ("cagr",   "CAGR   ", "%5.1f%%"),
-        ("sharpe", "Sharpe ", "%6.2f "),
-        ("maxdd",  "MaxDD  ", "%5.1f%%"),
-    ]:
-        vals = [df[col].quantile(p / 100) for p in PCTS]
-        if col in ("cagr", "maxdd"):
-            vals = [v * 100 for v in vals]
-        print("  %-8s " % label + "  ".join(fmt % v for v in vals))
-
-    pos  = 100 * (df["cagr"] > 0).mean()
-    beat = 100 * (df["cagr"] > base_cagr * 0.75).mean()
-    print("  positive: %.0f%%   within 75%% of base: %.0f%%" % (pos, beat))
-
-
-def sell_breakdown(trips: pd.DataFrame):
-    print("\n  Exit reason breakdown:")
-    grp = trips.groupby("sell_reason").agg(
-        count=("net_pnl", "count"),
-        median_ret=("return_pct", "median"),
-        win_rate=("return_pct", lambda x: (x > 0).mean()),
-        total_pnl=("net_pnl", "sum"),
-    ).sort_values("count", ascending=False)
-    for reason, row in grp.iterrows():
-        print("    %-20s  n=%3d  median=%+5.1f%%  win=%.0f%%  total_pnl=₹%+.0f" % (
-            reason, row["count"], row["median_ret"] * 100,
-            row["win_rate"] * 100, row["total_pnl"]))
-
-
-def best_worst(trips: pd.DataFrame, n: int = 10):
+def descriptive(trips, top):
+    print("\n  Exit-reason breakdown:")
+    g = trips.groupby("reason").agg(n=("net_pnl", "count"),
+                                    med=("ret", "median"),
+                                    win=("ret", lambda x: (x > 0).mean()),
+                                    pnl=("net_pnl", "sum")).sort_values("n", ascending=False)
+    for r, row in g.iterrows():
+        print("    %-18s n=%3d  median=%+5.1f%%  win=%.0f%%  total=₹%+.0f"
+              % (r, row["n"], row["med"] * 100, row["win"] * 100, row["pnl"]))
     s = trips.sort_values("net_pnl")
-    print("\n  Worst %d trades (by net P&L):" % n)
-    for _, t in s.head(n).iterrows():
-        print("    %s  %-16s  %+5.1f%%  ₹%+.0f  (%d days)" % (
-            t["entry_date"].date(), t["ticker"],
-            t["return_pct"] * 100, t["net_pnl"], t["holding_days"]))
-    print("\n  Best %d trades (by net P&L):" % n)
-    for _, t in s.tail(n).iterrows():
-        print("    %s  %-16s  %+5.1f%%  ₹%+.0f  (%d days)" % (
-            t["entry_date"].date(), t["ticker"],
-            t["return_pct"] * 100, t["net_pnl"], t["holding_days"]))
+    print("\n  Worst %d / best %d trades (net P&L):" % (top, top))
+    for _, t in s.head(top).iterrows():
+        print("    %s  %-14s %+6.1f%%  ₹%+.0f" % (t["entry_date"].date(), t["ticker"], t["ret"] * 100, t["net_pnl"]))
+    print("    ...")
+    for _, t in s.tail(top).iterrows():
+        print("    %s  %-14s %+6.1f%%  ₹%+.0f" % (t["entry_date"].date(), t["ticker"], t["ret"] * 100, t["net_pnl"]))
 
 
-# ── main ──────────────────────────────────────────────────────────────────────
+# ── reporting ──────────────────────────────────────────────────────────────────
+
+def report_rate(df, rate, base_cagr):
+    sub = df[(df["rate"] == rate) & df["cagr"].notna()]
+    if sub.empty:
+        print("\n  ── Remove %.0f%% — NO valid sims ──" % (rate * 100));  return
+    print("\n  ── Skip %.0f%% of entries · %d sims · mean skipped %.0f%% of attempts ──"
+          % (rate * 100, len(sub), sub["skip_frac"].mean() * 100))
+    hdr = "  %-8s " % "metric" + "  ".join("%7s" % ("p%d" % p) for p in PCTS)
+    print(hdr); print("  " + "-" * (len(hdr) - 2))
+    for col, label, scale in [("cagr", "CAGR  ", 100), ("sharpe", "Sharpe", 1), ("maxdd", "MaxDD ", 100)]:
+        vals = [sub[col].quantile(p / 100) * scale for p in PCTS]
+        fmt  = "%6.1f%%" if scale == 100 else "%7.2f"
+        print("  %-8s " % label + "  ".join(fmt % v for v in vals))
+    pos  = 100 * (sub["cagr"] > 0).mean()
+    keep = 100 * (sub["cagr"] >= base_cagr * 0.75).mean()
+    print("  positive: %.0f%%   ≥75%% of base CAGR: %.0f%%   median CAGR %.1f%% (base %.1f%%)"
+          % (pos, keep, sub["cagr"].median() * 100, base_cagr * 100))
+
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--remove", type=float, nargs="+",
-                    default=[0.1, 0.2, 0.3, 0.4, 0.5],
-                    help="Removal fractions, e.g. 0.1 0.2 0.3")
-    ap.add_argument("--n",           type=int,   default=2000)
-    ap.add_argument("--cash-yield",  type=float, default=0.05)
-    ap.add_argument("--seed",        type=int,   default=42)
-    ap.add_argument("--top",         type=int,   default=10,
-                    help="Best/worst trades to list")
+    ap.add_argument("--remove",  type=float, nargs="+", default=[0.1, 0.2, 0.3])
+    ap.add_argument("--n",       type=int, default=500, help="sims per removal rate")
+    ap.add_argument("--workers", type=int, default=max(1, mp.cpu_count()))
+    ap.add_argument("--top",     type=int, default=8)
+    ap.add_argument("--report-only", action="store_true")
     args = ap.parse_args()
 
-    trips    = load_round_trips(TRADE_LOG)
-    port, pnl = load_equity(EQUITY_CSV)
+    import backtester as bt, config as cfg
 
-    if trips.empty:
-        print("No completed round trips found — run a backtest first.")
-        sys.exit(1)
+    if args.report_only:
+        df = pd.read_csv(OUT)
+        base = df[df["rate"] == 0.0]["cagr"]
+        base_cagr = float(base.iloc[0]) if len(base) else float("nan")
+        for rate in sorted(r for r in df["rate"].unique() if r > 0):
+            report_rate(df, rate, base_cagr)
+        return
 
-    v0, vf = float(port.iloc[0]), float(port.iloc[-1])
-    years  = (port.index[-1] - port.index[0]).days / 365.25
-    base_cagr = (vf / v0) ** (1 / years) - 1
-    rets      = port.pct_change().dropna()
-    ann_vol   = rets.std() * np.sqrt(252)
-    base_sharpe = (base_cagr - RISK_FREE) / ann_vol if ann_vol > 0 else 0
-    peak  = port.cummax()
-    base_maxdd = ((port - peak) / peak).min()
+    # Baseline (p=0): one run, save outputs so the trade-log descriptive stats match config.
+    print("Baseline run (p=0, saving trade log)…", flush=True)
+    bt.MC_ENTRY_SKIP_PROB = 0.0
+    with open(os.devnull, "w") as dn, contextlib.redirect_stdout(dn), contextlib.redirect_stderr(dn):
+        m0 = bt.run_backtest(save=True)
+    base_cagr = float(m0["cagr"])
 
-    print("=" * 72)
-    print("  MONTE CARLO TRADE REMOVAL")
-    print("  Trade log : %s" % TRADE_LOG)
-    print("  Period    : %s → %s  (%.1f yrs)" % (
-        port.index[0].date(), port.index[-1].date(), years))
-    print("  Trades    : %d completed round-trips  (of %d log rows)" % (
-        len(trips), pd.read_csv(TRADE_LOG).shape[0]))
-    print("  Base      : CAGR %.1f%%  |  Sharpe %.2f  |  MaxDD %.1f%%" % (
-        base_cagr * 100, base_sharpe, base_maxdd * 100))
-    print("  Sims/rate : %d   |  percentiles shown: %s" % (
-        args.n, ", ".join("p%d" % p for p in PCTS)))
-    print("=" * 72)
+    print("=" * 74)
+    print("  MONTE CARLO TRADE REMOVAL  (exact re-simulation)")
+    print("  Window : %s → %s   config: weights %.2f/%.2f/%.2f/%.2f/%.2f · TOP_N %d · cut %d"
+          % (cfg.START_DATE, cfg.END_DATE, cfg.W_MOM_12M, cfg.W_MOM_6M, cfg.W_MOM_3M,
+             cfg.W_VOL, cfg.W_DIST_DMA, cfg.TOP_N, cfg.EXIT_RANK_CUTOFF))
+    print("  Base   : CAGR %.1f%%  |  Sharpe %.2f  |  MaxDD %.1f%%"
+          % (base_cagr * 100, m0["sharpe"], m0["maxdd"] * 100))
+    print("  Sims   : %d per rate × %d rates · %d workers" % (args.n, len(args.remove), args.workers))
+    print("=" * 74)
 
-    sell_breakdown(trips)
-    best_worst(trips, args.top)
+    if os.path.exists(TRADE_LOG):
+        descriptive(load_round_trips(TRADE_LOG), args.top)
 
-    print("\n" + "=" * 72)
-    print("  REMOVAL SENSITIVITY")
-    print("=" * 72)
+    # Build the (rate, seed) work list — distinct seeds per rate for independent paths.
+    jobs = [(rate, 1000 * j + i)
+            for j, rate in enumerate(sorted(args.remove))
+            for i in range(args.n)]
+    print("\nRunning %d simulations…" % len(jobs), flush=True)
 
+    t0, done, rows = time.time(), 0, [{"rate": 0.0, "seed": -1, "cagr": base_cagr,
+                                       "sharpe": m0["sharpe"], "maxdd": m0["maxdd"],
+                                       "edge_cagr": m0["edge_cagr"], "skip_frac": 0.0}]
+    with mp.Pool(args.workers, initializer=_init) as pool:
+        for r in pool.imap_unordered(evaluate, jobs, chunksize=4):
+            rows.append(r); done += 1
+            if done % 100 == 0 or done == len(jobs):
+                el = time.time() - t0
+                print("  %d/%d  elapsed %.1fm  eta %.1fm"
+                      % (done, len(jobs), el / 60, el / done * (len(jobs) - done) / 60), flush=True)
+
+    pd.DataFrame(rows).to_csv(OUT, index=False)
+
+    print("\n" + "=" * 74); print("  REMOVAL SENSITIVITY"); print("=" * 74)
+    df = pd.DataFrame(rows)
     for rate in sorted(args.remove):
-        report(trips, pnl, port, rate, args.n, args.cash_yield, args.seed)
-
-    print()
+        report_rate(df, rate, base_cagr)
+    print("\n  Full per-sim metrics: %s\n" % OUT)
 
 
 if __name__ == "__main__":
