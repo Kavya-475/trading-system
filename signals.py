@@ -1,17 +1,24 @@
 """
-signals.py
-==========
-Signal engine — reads price data from the CSV cache and produces
-momentum scores, portfolio selection, and exit signals.
+signals.py — the brain: turns cached prices into "what to hold and what to sell"
+================================================================================
+This is the strategy itself. It reads the price cache (NO network calls — that's
+data_manager's job) and answers three questions each day:
+  1. Is the market safe to be in?          → get_regime()         (RISK-ON / RISK-OFF)
+  2. Which stocks are the strongest now?    → compute_scores()     (the momentum rank)
+  3. Which of my holdings should I drop?    → check_exit_signals()
+run_signals() ties these together and hands the answer to execution.py.
 
-Reads entirely from the local cache (no network calls).
-Run data_manager.py first each day to ensure the cache is up to date.
+THE STRATEGY IN ONE PARAGRAPH: buy the stocks with the strongest recent price trend
+("momentum"), hold the top 15, and sell one when it falls out of favour (rank drops
+past EXIT_RANK_CUTOFF) or breaks its long-term trend (price below its 250-day average).
+Each stock's strength is a single "score" = a weighted blend of 12/6/3-month returns,
+how far it sits above its 250-day average, and a penalty for being too volatile. Every
+ingredient is z-scored (ranked relative to the other stocks that day) before blending,
+so only *relative* strength matters. All the weights live in config.py (the "opt#7" set).
 
-Daily workflow:
-    python data_manager.py   ← updates cache (run once at 3:40 PM)
-    python execution.py      ← reads cache, runs signals, places orders
+Reads entirely from the local cache. Run data_manager.py first to refresh it.
 
-Run standalone to see today's top 10 and any exit signals:
+Run standalone to print today's top holdings + any exit signals:
     python signals.py
 """
 
@@ -369,6 +376,10 @@ def get_regime(nifty500: pd.Series) -> str:
 # ─────────────────────────────────────────────
 def apply_liquidity_filter(close: pd.DataFrame, volume: pd.DataFrame,
                             tickers: list) -> list:
+    """Keep only stocks that are realistically tradable — enough price history, above
+    the minimum price, and a high enough 60-day average traded value (₹ crore). This
+    runs BEFORE scoring so illiquid names can never enter the portfolio. Returns the
+    surviving ticker list. (Thresholds are in config; raise them as capital grows.)"""
     passed = []
     for t in tickers:
         if t not in close.columns:
@@ -395,17 +406,32 @@ def apply_liquidity_filter(close: pd.DataFrame, volume: pd.DataFrame,
 
 
 # ─────────────────────────────────────────────
-# COMPUTE SCORES
-# Core of the momentum strategy. Scores every stock using a weighted
-# combination of z-scored momentum and volatility factors.
-# Formula: score = W12*z(mom_12m) + W6*z(mom_6m) + W3*z(mom_3m) + WV*z(vol_6m)
+# COMPUTE SCORES  — the heart of the strategy
+# Turns each stock's price history into ONE number ("score") so they can be ranked.
+#   score = W_12M·z(12m return) + W_6M·z(6m return) + W_3M·z(3m return)
+#         + W_VOL·z(6m volatility) + W_DIST_DMA·z(distance above 250-day average)
+# The W_* weights live in config.py (the optimizer-tuned "opt#7" recipe).
 # ─────────────────────────────────────────────
 def compute_scores(close: pd.DataFrame, tickers: list) -> pd.DataFrame:
     """
-    Scores each stock on momentum (12M, 6M, 3M) and optionally volatility.
-    All factors are z-scored cross-sectionally before weighting so that
-    only relative rankings matter, not absolute return levels.
-    Returns a DataFrame sorted best→worst, with score and raw factors.
+    Rank every stock by momentum strength. Returns a DataFrame sorted best→worst.
+
+    The score blends five ingredients, each measuring a different facet of "trend":
+      • 12m / 6m / 3m return — is the stock trending up over the long/medium/short term?
+      • 6-month volatility   — penalised (W_VOL is negative): prefer steadier climbers.
+      • distance above 250-DMA — how extended above its long-term average it is (trend
+                                 strength). Forensics found this was a top predictor of
+                                 the big winners.
+
+    Two ideas make this robust:
+      1. SKIP_RECENT — we measure momentum up to ~1 month AGO, not up to today, because
+         stocks that just spiked tend to pull back short-term ("reversal"). Skipping the
+         last month buys the durable trend, not the spike.
+      2. CROSS-SECTIONAL Z-SCORING — each raw factor is converted to a z-score *across
+         the stocks scored that day* (how many standard deviations above/below average).
+         So a "+40% 6m return" is judged relative to everyone else that day, and the five
+         factors (which live on totally different scales) become blendable. Only RELATIVE
+         strength matters — the absolute level of the market washes out.
     """
     records = []
     for t in tickers:
@@ -420,7 +446,8 @@ def compute_scores(close: pd.DataFrame, tickers: list) -> pd.DataFrame:
 
             s     = cfg.SKIP_RECENT    # number of recent days to skip (avoids short-term reversal)
 
-            # Price at "now" = SKIP_RECENT days ago (not today) to avoid reversal effect
+            # "now" = the price SKIP_RECENT days ago. iloc[-(s+1)] steps back s days from
+            # the last row. All momentum is measured up to this point, not today's close.
             p_now = prices.iloc[-(s+1)]
 
             # Prices at each lookback horizon (also shifted back by SKIP_RECENT)
@@ -497,6 +524,12 @@ def _entry_above_dma(close, ticker) -> bool:
 
 
 def select_portfolio(scored: pd.DataFrame, close: pd.DataFrame = None) -> pd.DataFrame:
+    """From the ranked list, pick the TOP_N stocks to actually hold, walking down the
+    ranking and taking each name UNLESS (a) it's below its 250-DMA (don't start a
+    position in a downtrend) or (b) its sector is already full (MAX_PER_SECTOR, to avoid
+    piling into one hot sector). Returns those names with an equal 1/N target weight.
+    NOTE: live sizing is later overridden to 'tiered' in paper_engine; this equal weight
+    is the simple selector used here and by signals' standalone print."""
     selected, sc = [], {}     # selected = chosen tickers, sc = sector counts
     for ticker, row in scored.iterrows():
         # Entry gate: skip names below their DMA_EXIT (matches the backtester)
@@ -525,6 +558,11 @@ def select_portfolio(scored: pd.DataFrame, close: pd.DataFrame = None) -> pd.Dat
 # ─────────────────────────────────────────────
 def check_exit_signals(close: pd.DataFrame, scored: pd.DataFrame,
                         current_holdings: list) -> list:
+    """Decide which CURRENTLY-HELD stocks to sell today. A holding is flagged for exit
+    if EITHER (1) its momentum rank slipped past EXIT_RANK_CUTOFF (it's no longer one of
+    the strongest names — the rank cutoff is wider than TOP_N so we don't churn on tiny
+    wobbles), OR (2) its price has fallen below its 250-DMA (trend broken). Returns the
+    list of tickers to sell. Runs every day, not just on rebalance days."""
     exits = []
     # The top EXIT_RANK_CUTOFF stocks by score — held stocks must stay within this group
     top_n = scored.head(cfg.EXIT_RANK_CUTOFF).index.tolist()

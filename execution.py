@@ -1,22 +1,38 @@
 """
-execution.py
-============
-Execution engine — reads signals and places orders via Kite Connect.
+execution.py — the hands: takes the signal and actually places the orders
+=========================================================================
+run_execution() is the entry point the scheduler calls each afternoon. It loads
+holdings + today's prices, asks signals.py what to do, then turns that into orders.
 
-Three-tier execution structure:
-  DAILY        : Check regime + exit signals. If exit triggered, immediately
-                 buy replacement from current top 25. Sell and replace same day.
-  MONTHLY      : Full portfolio review. Rotate any position overtaken by
-                 significantly better ranked stock even if no exit triggered.
-  IMMEDIATELY  : Regime flip RISK-OFF → sell everything, no waiting.
+⚠ THE MOST IMPORTANT THING TO UNDERSTAND — there are TWO separate code paths, chosen
+  by the PAPER_MODE switch below:
 
-PAPER_MODE = True  → logs orders, touches nothing real (default)
-PAPER_MODE = False → places real orders (only after API approved + tested)
+    PAPER_MODE = True  (current/default):  run_execution_paper()
+        → routes through paper_engine.py. Real cash ledger (paper_state.json), next-open
+          fill simulation, tiered sizing, per-lot tracking. NO broker contact. This is
+          what is being tested today, and it mirrors the backtester exactly.
 
-Run:
-    python execution.py
+    PAPER_MODE = False (live, NOT yet active):  the code AFTER the `return` in
+        _run_execution_impl()  → the legacy branch that calls execute_buys() and places
+          real Kite orders. ⚠ This path is currently NOT equivalent to the paper path
+          (different equal-weight sizing, optimistic same-close fills, no broker
+          reconciliation). It must be unified with paper_engine before going live.
 
-Schedule every weekday at 3:45 PM IST.
+  So: paper-testing exercises the paper_engine path; flipping PAPER_MODE to False jumps
+  to a DIFFERENT path. Don't assume one validates the other.
+
+SAFETY GUARDS that run before any order (added after a real incident where a download
+  glitch was misread as a market crash and liquidated everything):
+    • single-run lock  — two overlapping runs can't race (see _run_lock).
+    • freshness guard  — refuse to trade on a stale price cache (see _cache_age_days).
+    • regime UNKNOWN   — if the regime data is missing/short, abort and HOLD; never
+                         treat a data problem as a sell signal.
+
+WHAT THE STRATEGY DOES each day (both paths): check the regime; sell holdings that hit
+  an exit rule and (mid-month) buy replacements; on the first trading days of the month
+  do a full rebalance toward the new top-N; on RISK-OFF, hold cash. Then Telegram a summary.
+
+Run:  python execution.py     (scheduler runs it every weekday ~3:45 PM IST)
 """
 
 import os
@@ -290,19 +306,15 @@ def get_shares(holdings: dict, ticker: str) -> int:
 
 
 def get_avg_price(holdings: dict, ticker: str) -> float:
-    """Returns the weighted average buy price for a ticker (0.0 if unknown)."""
+    """Returns the weighted average buy price for a ticker (0.0 if unknown).
+    Derived from the position's per-lot record (see paper_engine.add_lot)."""
     val = holdings.get(ticker, {})
     return val.get("avg_price", 0.0) if isinstance(val, dict) else 0.0
 
 
-def set_holding(holdings: dict, ticker: str, shares: int,
-                avg_price: float = 0.0, entry_date: str = ""):
-    """Writes or updates a position in the holdings dict (does not save to disk)."""
-    holdings[ticker] = {
-        "shares"    : shares,
-        "avg_price" : avg_price,
-        "entry_date": entry_date or str(date.today())
-    }
+# NOTE: positions are now created/updated via paper_engine.add_lot() and closed via
+# paper_engine.realize_fifo() (per-lot FIFO tracking). The old single-value set_holding()
+# helper was removed in the cleanup — it had no remaining callers.
 
 def build_pnl_summary(holdings: dict, prices: dict) -> str:
     """
@@ -637,9 +649,20 @@ def _paper_telegram(holdings, close_px, state, fills, new_orders, regime):
 
 
 def run_execution_paper(holdings, close_px, signals):
-    """PAPER daily step. Confirm yesterday's open orders at today's open, then
-    place today's new limit orders via paper_engine (sells for rotations/exits;
-    buys deploy available cash), persist the ledger, and Telegram the result."""
+    """ONE paper-trading day. The flow mirrors how real orders settle — each run has
+    two phases:
+
+      PHASE 1 (settle yesterday): the limit orders we placed at yesterday's close were
+        sitting overnight. Confirm them against TODAY's open — fill, miss, or carry over
+        — and update cash + holdings. (This is the no-look-ahead part.)
+
+      PHASE 2 (decide today): using today's close + signals, work out what to sell
+        (exits, or names dropped from the top-N on a rebalance day) and what to buy
+        (deploy available cash, tiered), and place those as tomorrow's pending orders.
+
+    Then persist the ledger (paper_state.json) and Telegram a summary. Nothing here
+    contacts a broker — paper_engine simulates the fills.
+    """
     state = load_paper_state()
     opens = load_latest_opens()
     today = str(date.today())
@@ -665,6 +688,10 @@ def run_execution_paper(holdings, close_px, signals):
         port   = signals.get("portfolio")
         top_n  = (port.index.tolist() if (port is not None and not port.empty)
                   else (scored.head(cfg.TOP_N).index.tolist() if not scored.empty else []))
+        # Rebalance day (first trading days of the month, or an empty book) → a FULL
+        # rotation: sell everything no longer in the new top-N. Any other day is just
+        # MONITORING → sell only names that tripped an exit rule. Buys then auto-deploy
+        # whatever cash is available toward the top-N (tiered), inside generate_orders.
         is_reb = is_rebalance_day() or len(held) == 0
         sell_list = [t for t in held if t not in top_n] if is_reb else list(exits)
 

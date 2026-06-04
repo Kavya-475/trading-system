@@ -1,3 +1,25 @@
+"""
+scheduler.py — the daily cron entry point that runs the whole pipeline
+======================================================================
+This is the single command the server's cron job runs each weekday afternoon
+(~3:40 PM IST, after the market closes). It is a thin ORCHESTRATOR: it contains no
+trading logic itself — it just calls the other modules in the right order and makes
+sure one failing step doesn't silently kill the rest.
+
+The order is deliberate:
+  0. git pull      — self-update: pick up any code/config pushed to `main` since
+                     yesterday, so the server always runs the latest version.
+  1. kite_login    — refresh the daily-expiring Kite access token (live only).
+  2. data_manager  — append today's prices to the local cache. MUST run before
+                     step 3, because signals read ONLY from that cache.
+  3. execution     — run signals + place (or paper-simulate) orders + Telegram summary.
+
+Each step is wrapped in try/except so a non-fatal failure (e.g. Kite login while in
+paper mode) is logged and the pipeline keeps going. If execution itself fails, we try
+to send a Telegram alert so the problem gets noticed.
+
+Run manually with:  python scheduler.py
+"""
 import os, logging, subprocess
 from datetime import datetime
 from dotenv import load_dotenv

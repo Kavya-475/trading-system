@@ -1,23 +1,34 @@
 """
-data_manager.py
-===============
-Manages the price data cache for the trading system.
+data_manager.py — the ONLY module that touches the internet during trading
+==========================================================================
+ROLE: keep the local price cache up to date. Everything downstream (signals,
+execution) reads ONLY from the CSV cache this writes — they never hit the network.
+That separation is deliberate: it makes signal generation fast, deterministic, and
+immune to a flaky Yahoo Finance connection during the critical order window.
 
-Run this FIRST every day before execution.py.
-It fetches only the latest few days and appends to the existing cache.
-Much faster than re-downloading everything — takes ~30 seconds.
+Run this FIRST every day, before execution.py. It does an INCREMENTAL update —
+fetches only the few days missing since the last run and appends them — so the daily
+update takes ~30 seconds instead of re-downloading 20 years (~4 minutes).
+
+WHAT IT WRITES (CSV caches, all keyed by date, one column per stock):
+    price_data_cache.csv   — daily adjusted CLOSE   (the main signal input)
+    volume_data_cache.csv  — daily VOLUME           (for the liquidity filter)
+    open_data_cache.csv    — daily OPEN             (for next-open fill simulation)
+    regime_data_cache.csv  — Nifty 500 + Nifty 50   (for the market regime filter)
+
+⚠ ADJUSTED PRICES: we download with auto_adjust=True, so every price is split- AND
+  dividend-adjusted. That's correct for momentum signals, but it means a cached price
+  can differ from the raw traded price (a dividend retroactively scales earlier prices
+  down). This is why a paper fill won't match a Zerodha tick-for-tick — same total
+  economics, dividend folded into price instead of paid as cash.
 
 Daily workflow:
     3:40 PM → python data_manager.py    (update cache with today's close)
     3:45 PM → python execution.py       (run signals + place orders)
-
-Run manually anytime:
-    python data_manager.py
 """
 
 import yfinance as yf
 import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
 import os
 import warnings
@@ -282,28 +293,6 @@ UNIVERSE_TICKERS = [
 ]
 
 # ─────────────────────────────────────────────
-# SAFE COLUMN READER
-# yfinance 2.x changed its DataFrame structure and sometimes returns None
-# for a ticker column instead of raising a KeyError. This wrapper handles both.
-# ─────────────────────────────────────────────
-def safe_get_column(df: pd.DataFrame, col: str) -> pd.Series:
-    """
-    Safely extracts a column from a yfinance MultiIndex DataFrame.
-    Returns empty Series if column is missing or None.
-
-    This fixes the TypeError: 'NoneType' object is not subscriptable
-    which happens with yfinance 2.x when a ticker download fails.
-    """
-    try:
-        series = df[col]
-        if series is None:
-            return pd.Series(dtype=float)
-        return series.dropna()
-    except (KeyError, TypeError):
-        return pd.Series(dtype=float)
-
-
-# ─────────────────────────────────────────────
 # FETCH FRESH DATA FOR A DATE RANGE
 # Downloads OHLCV data from Yahoo Finance for the given tickers and date range.
 # yfinance 2.x can return MultiIndex DataFrames in different layouts depending
@@ -434,19 +423,23 @@ def update_cache():
     existing_vol  = pd.read_csv(cfg.VOLUME_CACHE, index_col=0, parse_dates=True)
     existing_open = pd.read_csv(cfg.OPEN_CACHE,   index_col=0, parse_dates=True) if os.path.exists(cfg.OPEN_CACHE) else pd.DataFrame()
 
-    # Only update columns that already exist in the cache (common between old and new)
+    # Merge the few new rows onto the existing cache. We split the new columns into:
+    #   common_cols — stocks already in the cache → just stack the new dates on top.
+    #   new_cols    — stocks that appeared for the first time (a fresh listing / a
+    #                 newly-added universe member) → add them as whole new columns,
+    #                 which will be NaN for all the historical dates they didn't exist.
     common_cols = existing.columns.intersection(new_close.columns)
-    new_cols    = new_close.columns.difference(existing.columns)   # newly listed stocks
+    new_cols    = new_close.columns.difference(existing.columns)
 
-    # Concatenate old + new rows for each cache
+    # Stack the new dates under the existing history (rows = dates).
     updated_close = pd.concat([existing,      new_close[common_cols]])
     updated_vol   = pd.concat([existing_vol,  new_volume[common_cols]])
 
-    # Remove any duplicate dates that might arise from running twice on the same day
+    # If the job ran twice in one day, the same date appears twice — keep the latest.
     updated_close = updated_close[~updated_close.index.duplicated(keep="last")]
     updated_vol   = updated_vol[~updated_vol.index.duplicated(keep="last")]
 
-    # Append data for any newly listed stocks not in the existing cache
+    # Attach any brand-new stocks as new columns (only have data from their first day).
     for col in new_cols:
         updated_close[col] = new_close[col]
         updated_vol[col]   = new_volume.get(col, pd.Series())

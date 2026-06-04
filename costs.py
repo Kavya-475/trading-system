@@ -14,6 +14,25 @@ import config as cfg
 
 
 def txn_cost(value, side):
+    """Total charges (in ₹) for one trade leg of rupee size `value`.
+
+    `side` is "buy" or "sell". Some charges are one-sided (stamp duty on buys, the
+    DP charge on sells), so the same ₹ value costs slightly different amounts to buy
+    vs sell. Called once per fill by both the live/paper engine and the backtest, so
+    that simulated and real costs come from a single formula.
+
+    Each component, and why it's here:
+      • brokerage — ₹0: Zerodha charges nothing for CNC (delivery) equity.
+      • exch      — NSE exchange transaction charge, both sides.
+      • sebi      — SEBI regulatory turnover fee, both sides.
+      • stt       — Securities Transaction Tax. For DELIVERY it applies on BOTH buy
+                    and sell (intraday is sell-only — not relevant here).
+      • stamp     — government stamp duty, buy side only.
+      • dp        — flat ₹15.93 depository (CDSL/NSDL) charge levied per SELL, per
+                    scrip. Flat, not percentage — so it hurts small sells the most.
+      • gst       — 18% GST charged on the (brokerage + exchange + SEBI) components.
+    A typical round-trip (buy then sell) lands around ~0.17% of traded value.
+    """
     brokerage = 0.0                                   # Zerodha CNC delivery = ₹0
     exch      = value * cfg.EXCHANGE_CHARGE
     sebi      = value * cfg.SEBI_CHARGE

@@ -1,8 +1,27 @@
 """
 config.py
 =========
-Single source of truth for all strategy parameters.
-Edit numbers here — signals.py and backtester.py import from here.
+Single source of truth for ALL strategy parameters. Every other module imports its
+numbers from here — never hard-code a threshold or weight anywhere else, change it
+here so the live engine and the backtest always agree.
+
+HOW TO READ THIS FILE — it's grouped into sections, top to bottom:
+  • PORTFOLIO CONSTRUCTION — how many stocks, sector caps, exit cutoff, position sizing.
+  • SIGNAL WEIGHTS        — the 5 numbers that define the momentum score (the "opt#7"
+                            recipe found by the optimizer). Only their RATIOS matter.
+  • LOOKBACK PERIODS      — how far back each momentum/trend measure reaches.
+  • UNIVERSE FILTERS      — liquidity / stale-price gates a stock must pass to be scored.
+  • TAX + TRANSACTION COSTS — realistic Indian-equity costs used by both live and backtest.
+  • REGIME / DATES / FLAGS — market on-off filter, backtest window, and the two
+                            FORCE_RISK_ON flags (see the warning below).
+
+⚠ THE ONE THING THAT TRIPS PEOPLE UP — there are TWO separate regime switches:
+    FORCE_RISK_ON           → affects LIVE/paper (execution.py)
+    BACKTEST_FORCE_RISK_ON  → affects the BACKTEST (research/backtester.py)
+  They are deliberately decoupled. Changing one does NOT change the other.
+
+⚠ START_DATE / END_DATE only affect the BACKTEST window. They have ZERO effect on
+  live/paper trading (which always trades "today").
 """
 
 # ─────────────────────────────────────────────
@@ -72,6 +91,7 @@ REGIME_DMA      = 200
 
 # Exit a stock if its price falls below this many-day moving average (trend breakdown)
 DMA_EXIT        = 250
+
 # Buffer below the DMA before the EXIT fires: sell only when price is this fraction
 # below the DMA (0.02 = 2%). The entry gate stays strict (buy at/above DMA), so this
 # creates a hysteresis band that cuts DMA ping-pong churn. 0 = exit exactly at the line.
@@ -185,7 +205,7 @@ START_DATE      = "2009-01-01"   # First date the backtest places orders.
                                  # capturing the FULL 2008 GFC peak-to-trough
                                  # (the earlier 2007-10 start started mid-warmup,
                                  #  leaving 2008 only half-tested).
-END_DATE        = "2020-12-31"   # Last date included in the backtest
+END_DATE        = "2026-06-04"   # Last date included in the backtest
 INITIAL_CAPITAL = 100000         # ₹1 lakh starting capital
 RISK_FREE_RATE  = 0.065          # 6.5% — India 10-year G-Sec, used for Sharpe/Sortino
 
@@ -196,7 +216,7 @@ RISK_FREE_RATE  = 0.065          # 6.5% — India 10-year G-Sec, used for Sharpe
 # ─────────────────────────────────────────────
 
 DATA_FETCH_START = "2005-01-01"          # Download history from this date — needs 305 trading days before START_DATE for warmup
-DATA_FETCH_END   = "2026-05-29"          # Download up to this date
+DATA_FETCH_END   = "2026-06-04"          # Download up to this date
 DATA_CACHE_FILE  = "price_data_cache.csv"   # Daily adjusted close prices for all 250 stocks
 VOLUME_CACHE     = "volume_data_cache.csv"  # Daily trading volume for all 250 stocks
 OPEN_CACHE       = "open_data_cache.csv"    # Daily open prices (used for realistic fill simulation)
@@ -223,7 +243,7 @@ NSE_REGIME_CACHE = "nse_data/regime_cache.csv"
 
 # When True, overrides the regime filter so the strategy always stays invested.
 # Used during paper testing so we can observe signals even in RISK-OFF markets.
-# Set to False before going live.
+
 FORCE_RISK_ON   = True
 
 # Backtest-only override, decoupled from the live FORCE_RISK_ON above so that
@@ -235,6 +255,11 @@ BACKTEST_FORCE_RISK_ON = True   # regime filter OFF — always invested (the 16.
 
 # Emergency kill switch — set True to immediately stop all trading and signal processing
 TRADING_HALTED  = False
+
+# Max calendar days the price cache may lag today before execution refuses to trade
+# (data-pipeline-failure guard). Spans normal weekend/long-holiday gaps; only a real
+# stall exceeds it. See execution._cache_age_days / freshness guard.
+MAX_CACHE_STALE_DAYS = 6
 
 
 # ─────────────────────────────────────────────

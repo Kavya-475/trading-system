@@ -1,21 +1,34 @@
 """
-paper_engine.py — shared paper-trading engine that mirrors backtester.py
-========================================================================
-One source of truth for paper fills + sizing, used by both:
-  • execution.py  (one step per day, state persisted in paper_state.json)
-  • tools/paper_replay.py  (the same step looped over history)
+paper_engine.py — the order-sizing + fill simulator (shared by live-paper and replay)
+=====================================================================================
+"Paper trading" = trading with fake money but a REALISTIC simulation, to prove the
+system works before risking real capital. This module is the engine that (a) decides
+exactly how many shares to buy/sell, and (b) simulates whether those orders fill. It's
+deliberately the SAME code used by:
+  • execution.py            — one real day at a time, state saved in paper_state.json
+  • tools/paper_replay.py   — the same step looped over history to backfill/validate
+so paper results and the live path can never silently diverge.
 
-It reproduces the backtester's model exactly:
-  • TIERED position sizing (rank_weights → RANK_TIER_WEIGHTS), two-pass with
-    leftover redistribution; the costly-high-rank single-share rule; pass 2
-    only tops up names already in scope (so names too expensive for even one
-    share are skipped, and their budget flows to affordable names).
-  • Orders are placed at day T's CLOSE (the price known then) as LIMIT orders,
-    and FILL AT THE NEXT OPEN (buy if open ≤ close×buffer, sell if open ≥
-    close×(1-SELL_BUFFER); otherwise missed — a gap-through). Cost basis = the
-    actual open fill. This matches backtester.get_fill_price.
+It mirrors the backtester's model exactly, which is what makes paper results comparable:
 
-Holdings format (execution.py's): {ticker: {shares, avg_price, entry_date}}.
+  HOW ORDERS ARE SIZED (generate_orders):
+    Capital is split by TIERED weights (top-ranked names get more) — see tiered_weights.
+    It's a two-pass fill: pass 1 buys each name toward its target with the cash on hand;
+    pass 2 sweeps any leftover rupees into the highest-rank affordable name. A name too
+    expensive for even one share is skipped and its budget flows elsewhere.
+
+  HOW FILLS ARE SIMULATED (fill_orders) — the realistic, no-look-ahead part:
+    An order decided using day T's CLOSE is a LIMIT order that fills at day T+1's OPEN —
+    a BUY fills only if the open is at/below its limit, a SELL only if at/above. If the
+    market gaps through the limit, the order is MISSED (just like real life). The cost
+    basis recorded is the ACTUAL open fill, not the close we decided at.
+
+  SELL→CONFIRM→BUY SEQUENCING: buys only spend cash that has actually settled, so a sell
+    placed today frees cash only when it confirms tomorrow — money can't be double-spent.
+
+Holdings format: {ticker: {shares, avg_price, entry_date, lots:[{shares,price,date}...]}}
+  where `lots` is the real per-purchase record (see the PER-LOT TRACKING section) and
+  shares/avg_price/entry_date are derived from it for convenient display.
 """
 import config as cfg
 from costs import txn_cost
@@ -35,11 +48,16 @@ def tiered_weights(n):
 
 
 def _buy_buffer(rank):
+    """How far ABOVE the close we set a buy limit, so the order actually fills at the
+    next open instead of being left behind by a small gap-up. Higher-conviction (better
+    rank) names get a wider buffer — we're more willing to chase them a little."""
     return (cfg.BUY_BUFFER_TOP5 if rank < 5 else
             cfg.BUY_BUFFER_MID if rank < 12 else cfg.BUY_BUFFER_REST)
 
 
 def shares_of(holdings, t):
+    """Shares currently held of ticker t (0 if none). Tolerates both the rich dict
+    format and a bare integer, so it works on any holdings snapshot."""
     v = holdings.get(t, {})
     return v.get("shares", 0) if isinstance(v, dict) else int(v or 0)
 

@@ -1,3 +1,27 @@
+"""
+kite_login.py — headless daily Zerodha Kite Connect login
+=========================================================
+WHY THIS EXISTS: Kite Connect access tokens expire every single day. Live trading
+therefore needs a fresh token each morning before any orders can be placed. Doing
+that by hand (open browser → type password → type 2FA code → click Authorise) every
+day is impractical for an automated system, so this script performs the entire login
+flow automatically in an invisible (headless) browser.
+
+HOW IT WORKS (the Kite OAuth-style handshake):
+  1. Ask KiteConnect for the login URL for our app (api_key).
+  2. Drive a headless Chromium browser through the login form (user id + password).
+  3. Generate the current 6-digit TOTP 2-factor code from the shared secret and enter it.
+  4. Click "Authorise" — Kite then redirects to our app with ?request_token=... in the URL.
+  5. Intercept that request_token, then exchange it (+ api_secret) for an access_token.
+  6. Write the access_token into .env, where execution.py reads it to authenticate.
+
+WHERE IT RUNS: scheduler.py calls get_access_token() once at the start of the daily
+cron run, before data_manager and execution. In PAPER_MODE this is not needed (no real
+broker calls), so a failure here is logged but doesn't stop paper trading.
+
+SECRETS: every credential below comes from .env (never hard-coded). KITE_TOTP_SECRET is
+the seed that lets pyotp reproduce the same time-based codes as your authenticator app.
+"""
 import os, asyncio, pyotp
 from playwright.async_api import async_playwright
 from kiteconnect import KiteConnect
