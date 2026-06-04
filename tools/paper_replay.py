@@ -13,7 +13,7 @@ have run each evening — but with honest fills:
 
 It reuses the real strategy logic from signals.py (so it matches execution.py:
 compute_scores, select_portfolio, check_exit_signals, get_regime) and txn_cost
-from backtester.py. It honours the current config — regime via FORCE_RISK_ON,
+from costs.py. It honours the current config — regime via FORCE_RISK_ON,
 EXIT_RANK_CUTOFF, TOP_N, sector cap, DMA, the buy/sell buffers.
 
 At the end it prints a day-by-day log + final P&L (marked to the last close) and,

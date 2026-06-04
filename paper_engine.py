@@ -18,7 +18,7 @@ It reproduces the backtester's model exactly:
 Holdings format (execution.py's): {ticker: {shares, avg_price, entry_date}}.
 """
 import config as cfg
-from backtester import txn_cost
+from costs import txn_cost
 
 
 def tiered_weights(n):

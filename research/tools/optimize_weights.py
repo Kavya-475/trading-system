@@ -49,8 +49,9 @@ import multiprocessing as mp
 
 import pandas as pd
 
-HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, HERE)
+HERE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
+sys.path.insert(0, HERE)                              # config, data caches, outputs (root)
+sys.path.insert(0, os.path.join(HERE, "research"))    # backtester.py (research/)
 OUT   = os.path.join(HERE, "wfo_results.csv")
 TOP50 = os.path.join(HERE, "wfo_top50.csv")
 

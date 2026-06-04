@@ -22,7 +22,7 @@ python scheduler.py
 ## Running backtests
 
 ```bash
-python backtester.py       # India — daily exits, monthly rotation
+python research/backtester.py   # India — daily exits, monthly rotation (run from repo root)
 ```
 
 Two data sources, selected by `USE_NSE_BHAVCOPY` in `config.py`:
@@ -39,33 +39,44 @@ python signals.py          # reads cache, prints current top holdings and any ex
 
 ## Architecture
 
+The repo is split into a **live/paper runtime at the root** (what the cron runs)
+and a **`research/` archive** (the locked backtest world). The live path never
+imports anything from `research/`.
+
 ```
+── ROOT — live + paper (cron runs these) ─────────────────────────────────────
 config.py             ← single source of truth for ALL parameters
+costs.py              ← shared Indian-equity transaction cost model (txn_cost), used by live + backtest
 data_manager.py       ← incremental cache management (yfinance → CSV)
 signals.py            ← signal engine (cache-only, zero network calls)
 execution.py          ← order placement via Kite Connect + Telegram alerts (paper mode → paper_engine)
-paper_engine.py       ← shared paper-trading engine: cash ledger, next-open fills, sell→confirm→buy sequencing (mirrors backtester)
+paper_engine.py       ← shared paper-trading engine: cash ledger, next-open fills, FIFO lots, sell→confirm→buy
 kite_login.py         ← Playwright-based headless Kite login (TOTP auto-fill)
 scheduler.py          ← thin cron wrapper: kite_login → update_cache → run_execution
-backtester.py         ← walk-forward India backtest (daily exits + monthly rotation)
-blueshift_strategy.py ← Blueshift (QuantInsti) port, no regime filter (uncommitted/experimental)
-universe_history.csv  ← point-in-time Nifty LargeMidCap 250 membership (anti-survivorship)
+universe_history.csv  ← point-in-time Nifty LargeMidCap 250 membership (used by the backtest; lives at root)
+tools/                ← paper-testing utilities
+  paper_replay.py     ← replays the paper engine over history (--messages / --telegram)
+  verify_paper_state.py ← integrity check for current_holdings.json + paper_state.json
 
-tools/                ← infrequently-run maintenance + research utilities
+── research/ — backtest + analysis (the locked strategy; not on the live path) ─
+research/backtester.py         ← walk-forward India backtest (daily exits + monthly rotation)
+research/blueshift_strategy.py ← Blueshift (QuantInsti) port, no regime filter
+research/tools/
+  optimize_weights.py     ← multi-period walk-forward sweep of the 5 scoring weights (produced opt#7)
+  optimize_structural.py  ← Phase-1 sweep of TOP_N × MAX_PER_SECTOR × EXIT_RANK_CUTOFF
+  optimize_lookback.py    ← Phase-2 sweep of LOOKBACK_12M/6M/3M + SKIP_RECENT
+  holding_surface.py      ← entry→exit-year CAGR surface
+  monte_carlo_trades.py   ← Monte Carlo trade-removal robustness (exact re-simulation)
   build_universe_history.py ← rebuilds universe_history.csv from nse_snapshots/
   merge_constituents.py     ← merges dated constituent files into universe_history.csv
-  optimize_weights.py       ← multi-period walk-forward sweep of the 5 scoring weights (produced opt#7)
-  optimize_structural.py    ← Phase-1 sweep of TOP_N × MAX_PER_SECTOR × EXIT_RANK_CUTOFF
-  optimize_lookback.py      ← Phase-2 sweep of LOOKBACK_12M/6M/3M + SKIP_RECENT
-  holding_surface.py        ← 190-window entry→exit-year CAGR surface (run on the VM)
-  paper_replay.py           ← replays the paper engine over history for validation
 
-nse_data/             ← survivorship-bias-free price cache from NSE bhavcopy
-  download.py         ← fetch raw daily bhavcopy (equity + index), resumable
-  fetch_splits.py     ← authoritative split/bonus calendar from yfinance
-  build_caches.py     ← parse → split-adjust → emit bias-free price/open/volume cache
-  README.md           ← runbook + caveats
+nse_data/             ← survivorship-bias-free price cache from NSE bhavcopy (data stays at root)
+  download.py · fetch_splits.py · build_caches.py · README.md
 ```
+
+**Run research from the repo root** so the CWD-relative data paths resolve, e.g.
+`python research/backtester.py`, `python research/tools/monte_carlo_trades.py`.
+(`research/backtester.py` adds the repo root to `sys.path` so it finds `config`/`costs`.)
 
 **Data flow:** `data_manager` fetches from Yahoo Finance and writes CSVs → `signals` and `execution` read only from those CSVs — no live network calls during trading hours.
 
@@ -100,7 +111,7 @@ All strategy parameters live here — never hardcode them elsewhere. Current dep
 
 **Live vs backtest regime flags (decoupled — do not conflate):**
 - `FORCE_RISK_ON = True` — affects **live/paper** (`execution.py`) only; overrides RISK-OFF so the strategy stays invested. **This is the live flag; set False before going live IF you want the regime drawdown-defense.** Currently `True` by deliberate choice (always-invested profile).
-- `BACKTEST_FORCE_RISK_ON = True` — affects **`backtester.py`** only; currently `True` (regime OFF) so backtests match the live always-invested behaviour. Set False to exercise the regime filter (the main drawdown defense) in a backtest.
+- `BACKTEST_FORCE_RISK_ON = True` — affects **`research/backtester.py`** only; currently `True` (regime OFF) so backtests match the live always-invested behaviour. Set False to exercise the regime filter (the main drawdown defense) in a backtest.
 
 **Backtest realism knobs (config.py):**
 - `USE_NSE_BHAVCOPY = True` — use the bias-free `nse_data/` cache instead of yfinance
@@ -147,7 +158,7 @@ In paper mode, `execution.py` routes through `paper_engine.py`: it runs a real c
 ## Universe
 
 - **Live** (`signals.py` `UNIVERSE` dict, `data_manager.py` `UNIVERSE_TICKERS` list) must stay in sync; update **both** if you add/remove tickers.
-- **Backtest** uses `universe_history.csv` (point-in-time membership) when present, which is what removes survivorship bias from universe selection; it falls back to the hardcoded `UNIVERSE` dict in `backtester.py` only if that file is missing. `universe_history.csv` is stale after 2020-07-31 — extend it via `tools/merge_constituents.py` (see `nse_data/README.md`).
+- **Backtest** uses `universe_history.csv` (point-in-time membership) when present, which is what removes survivorship bias from universe selection; it falls back to the hardcoded `UNIVERSE` dict in `research/backtester.py` only if that file is missing. `universe_history.csv` is stale after 2020-07-31 — extend it via `research/tools/merge_constituents.py` (see `nse_data/README.md`).
 
 ## Dependencies
 

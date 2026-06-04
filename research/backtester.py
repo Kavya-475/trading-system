@@ -27,10 +27,18 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import os
+import sys
 import warnings
 warnings.filterwarnings("ignore")
 
+# This file lives in research/ but config.py + costs.py live at the repo root, and
+# its data caches are CWD-relative — so add the repo root to the path so it imports
+# and runs correctly whether invoked as `python research/backtester.py` from root
+# or imported by a tool in research/tools/.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import config as cfg
+from costs import txn_cost
 
 # ── Universe ───────────────────────────────────────────────────────────────
 UNIVERSE = {
@@ -316,15 +324,7 @@ UNIVERSE = {
 
 
 # ── Transaction costs ──────────────────────────────────────────────────────
-def txn_cost(value, side):
-    brokerage = 0.0                                   # Zerodha CNC delivery = ₹0
-    exch      = value * cfg.EXCHANGE_CHARGE
-    sebi      = value * cfg.SEBI_CHARGE
-    stt       = value * (cfg.STT_BUY if side == "buy" else cfg.STT_SELL)   # both sides for delivery
-    stamp     = value * cfg.STAMP_DUTY if side == "buy"  else 0.0
-    dp        = 15.93                  if side == "sell" else 0.0          # flat DP charge per sell
-    gst       = (brokerage + exch + sebi) * getattr(cfg, "GST_RATE", 0.0) # 18% GST on charges
-    return brokerage + exch + sebi + stt + stamp + dp + gst
+# txn_cost now lives in costs.py (shared with paper_engine) — imported at the top.
 
 _TAX_CHANGE        = pd.Timestamp("2024-07-23")   # STCG 15→20%, LTCG 10→12.5%
 _LTCG_TAXABLE_FROM = pd.Timestamp("2018-04-01")   # before this, listed-equity LTCG was EXEMPT (Sec 10(38))

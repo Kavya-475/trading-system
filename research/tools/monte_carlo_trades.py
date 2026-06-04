@@ -34,8 +34,9 @@ import multiprocessing as mp
 
 import pandas as pd
 
-HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, HERE)
+HERE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
+sys.path.insert(0, HERE)                              # config, data caches, outputs (root)
+sys.path.insert(0, os.path.join(HERE, "research"))    # backtester.py (research/)
 
 TRADE_LOG  = os.path.join(HERE, "trade_log_daily.csv")
 OUT        = os.path.join(HERE, "mc_trades_results.csv")

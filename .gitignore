@@ -48,3 +48,4 @@ surface.log
 
 # runtime single-run lock
 execution.lock
+mc_trades_results.csv

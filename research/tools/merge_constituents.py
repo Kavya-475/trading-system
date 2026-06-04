@@ -34,7 +34,7 @@ import sys
 import glob
 import pandas as pd
 
-HERE   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE   = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
 SNAPS  = os.path.join(HERE, "nse_snapshots")
 HIST   = os.path.join(HERE, "universe_history.csv")
 PRICE  = os.path.join(HERE, "nse_data", "price_cache.csv")
