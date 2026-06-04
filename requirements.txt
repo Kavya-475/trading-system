@@ -41,3 +41,4 @@ urllib3==2.6.3
 websockets==15.0.1
 yfinance==1.2.0
 zope.interface==8.4
+openpyxl>=3.1   # tools/daily_ranks.py --xlsx export

@@ -49,3 +49,5 @@ surface.log
 # runtime single-run lock
 execution.lock
 mc_trades_results.csv
+daily_ranks.csv
+daily_ranks.xlsx

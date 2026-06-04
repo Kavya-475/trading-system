@@ -32,6 +32,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--top", type=int, default=0, help="show only the top N (0 = all)")
     ap.add_argument("--csv", action="store_true", help="also write daily_ranks.csv")
+    ap.add_argument("--xlsx", action="store_true", help="also write daily_ranks.xlsx (Excel)")
     args = ap.parse_args()
 
     close, volume = load_for_signals()
@@ -72,13 +73,40 @@ def main():
               % (cfg.LOOKBACK_12M + cfg.SKIP_RECENT, len(excluded)))
         print("    " + ", ".join(sorted(excluded)))
 
-    if args.csv:
-        out = os.path.join(HERE, "daily_ranks.csv")
-        cols = ["sector", "score", "price", "mom_12m", "mom_6m", "mom_3m", "vol_6m", "dist_dma"]
-        df = scored[cols].copy()
-        df.insert(0, "rank", range(1, len(df) + 1))
-        df.to_csv(out)
-        print(f"\n  Wrote {out}  ({len(df)} ranked stocks)")
+    if args.csv or args.xlsx:
+        # Tidy export frame: rank, status flag, score, price, and factors as %.
+        df = pd.DataFrame({
+            "rank":     range(1, len(scored) + 1),
+            "ticker":   scored.index,
+            "sector":   scored["sector"].values,
+            "status":   ["TOP15" if i < cfg.TOP_N else ("within_cutoff" if i < cfg.EXIT_RANK_CUTOFF else "")
+                         for i in range(len(scored))],
+            "score":    scored["score"].round(3).values,
+            "price":    scored["price"].round(1).values,
+            "mom_12m_%": (scored["mom_12m"] * 100).round(1).values,
+            "mom_6m_%":  (scored["mom_6m"]  * 100).round(1).values,
+            "mom_3m_%":  (scored["mom_3m"]  * 100).round(1).values,
+            "vol_6m_%":  (scored["vol_6m"]  * 100).round(1).values,
+            "dist_dma_%":(scored["dist_dma"] * 100).round(1).values,
+        })
+        if args.csv:
+            out = os.path.join(HERE, "daily_ranks.csv")
+            df.to_csv(out, index=False)
+            print(f"\n  Wrote {out}  ({len(df)} ranked stocks)")
+        if args.xlsx:
+            out = os.path.join(HERE, "daily_ranks.xlsx")
+            try:
+                with pd.ExcelWriter(out, engine="openpyxl") as xl:
+                    df.to_excel(xl, index=False, sheet_name=f"ranks {asof}")
+                    ws = xl.sheets[f"ranks {asof}"]
+                    for col in ws.columns:                       # autosize columns
+                        width = max(len(str(c.value)) for c in col) + 2
+                        ws.column_dimensions[col[0].column_letter].width = width
+                    ws.freeze_panes = "A2"                        # keep the header visible
+                print(f"  Wrote {out}  ({len(df)} ranked stocks)")
+            except ImportError:
+                print("  --xlsx needs openpyxl (pip install openpyxl); wrote CSV only" if args.csv
+                      else "  --xlsx needs openpyxl: pip install openpyxl")
 
 
 if __name__ == "__main__":
